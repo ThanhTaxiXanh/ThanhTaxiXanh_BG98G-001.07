@@ -512,7 +512,8 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
                     streetName = maps.streetName.takeIf { gpsReady } ?: "",
                     signs = if (gpsReady) maps.signsState else SignsState.EMPTY,
                     settings = currentSettings,
-                    guidance = maps.guidanceState
+                    guidance = maps.guidanceState,
+                    laneGuidance = maps.laneGuidanceState
                 )
                 if (isDebuggable) {
                     // Personal/debug Android Auto mode: always keep the full dashboard

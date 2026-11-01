@@ -19,6 +19,8 @@ import vn.thanhtaxixanh.bg98g00107.reports.TrafficReport
 import vn.thanhtaxixanh.bg98g00107.reports.TrafficReportMapPolicy
 import vn.thanhtaxixanh.bg98g00107.reports.TrafficReportStore
 import vn.thanhtaxixanh.bg98g00107.signs.BundledRoadContext
+import vn.thanhtaxixanh.bg98g00107.signs.LaneGuidanceResolver
+import vn.thanhtaxixanh.bg98g00107.signs.LaneGuidanceState
 import vn.thanhtaxixanh.bg98g00107.signs.OfflineSpeedLimitResolver
 import vn.thanhtaxixanh.bg98g00107.signs.RoadSigns
 import vn.thanhtaxixanh.bg98g00107.signs.SignsState
@@ -118,6 +120,8 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     var satUsed = 0
     var onFrame: (() -> Unit)? = null
     var signsState: SignsState = SignsState.EMPTY
+    var laneGuidanceState: LaneGuidanceState = LaneGuidanceState.EMPTY
+        private set
     var guidanceState: RouteGuidanceState = RouteGuidanceState.EMPTY
         private set
 
@@ -1111,7 +1115,10 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     }
 
     private fun updateSigns() {
-        if (!hasFix) return
+        if (!hasFix) {
+            laneGuidanceState = LaneGuidanceState.EMPTY
+            return
+        }
         try {
             signs.request(tLat, tLon)
             val liveState = signs.state(
@@ -1134,10 +1141,12 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                     limit = offlineState.limit,
                     estimated = false,
                     status = offlineState.status,
-                    roadWayId = offlineState.roadWayId
+                    roadWayId = offlineState.roadWayId,
+                    roadForward = offlineState.roadForward
                 ) else if (offlineState.roadWayId != null) liveState.copy(
                     status = offlineState.status,
-                    roadWayId = offlineState.roadWayId
+                    roadWayId = offlineState.roadWayId,
+                    roadForward = offlineState.roadForward
                 ) else liveState
 
             val routeOfflineWarnings = routeMarkerMatcher.upcoming(
@@ -1168,6 +1177,24 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             signsState = baseState.copy(
                 upcoming = mergedWarnings.sortedBy { it.distM }.take(4)
             )
+            val laneRoad = signsState.roadWayId?.let { wayId ->
+                offlineRoadContext.firstOrNull {
+                    it.geometry.wayId == wayId
+                }
+            }
+            laneGuidanceState = if (
+                laneRoad != null &&
+                signsState.roadForward != null &&
+                guidanceState.active
+            ) {
+                LaneGuidanceResolver.resolve(
+                    laneRoad,
+                    signsState.roadForward,
+                    guidanceState.maneuver
+                )
+            } else {
+                LaneGuidanceState.EMPTY
+            }
             val near = signs.nearby(tLat, tLon, 600.0, 60)
             // Include sign type, label and limit: the same node can change meaning after refresh.
             // Check the style/source before comparing to avoid suppressing the first render.

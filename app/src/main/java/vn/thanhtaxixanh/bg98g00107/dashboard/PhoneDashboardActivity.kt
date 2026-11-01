@@ -539,7 +539,8 @@ class PhoneDashboardActivity : Activity() {
                     streetName = maps.streetName.takeIf { gpsGood }.orEmpty(),
                     signs = if (gpsGood) maps.signsState else SignsState.EMPTY,
                     settings = settings,
-                    guidance = maps.guidanceState
+                    guidance = maps.guidanceState,
+                    laneGuidance = maps.laneGuidanceState
                 ))
             }
         }

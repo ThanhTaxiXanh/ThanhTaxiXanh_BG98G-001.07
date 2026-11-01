@@ -6,6 +6,8 @@ import vn.thanhtaxixanh.bg98g00107.car.CarService
 import vn.thanhtaxixanh.bg98g00107.navigation.ManeuverType
 import vn.thanhtaxixanh.bg98g00107.navigation.RouteGuidanceState
 import vn.thanhtaxixanh.bg98g00107.signs.SignItem
+import vn.thanhtaxixanh.bg98g00107.signs.LaneGuidanceState
+import vn.thanhtaxixanh.bg98g00107.signs.LaneTurn
 import vn.thanhtaxixanh.bg98g00107.signs.SignsState
 
 import android.graphics.Bitmap
@@ -37,7 +39,8 @@ data class UiState(
     val streetName: String,
     val signs: SignsState = SignsState.EMPTY,
     val settings: DashboardSettings = DashboardSettings(),
-    val guidance: RouteGuidanceState = RouteGuidanceState.EMPTY
+    val guidance: RouteGuidanceState = RouteGuidanceState.EMPTY,
+    val laneGuidance: LaneGuidanceState = LaneGuidanceState.EMPTY
 )
 
 class LauncherRenderer {
@@ -209,7 +212,9 @@ class LauncherRenderer {
         lastMain = main
 
         drawMain(c, main, st)
-        if (st.guidance.active) drawGuidance(c, cal, st.guidance)
+        if (st.guidance.active) {
+            drawGuidance(c, cal, st.guidance, st.laneGuidance)
+        }
         else if (st.settings.showCalendar) drawCalendar(c, cal, st)
         else drawDisabledPanel(c, cal, "Lịch đã ẩn")
         if (st.settings.showQr) drawQr(c, qr, st.qrFile)
@@ -510,7 +515,12 @@ class LauncherRenderer {
 
     // ---------- dẫn đường / turn guidance ----------
 
-    private fun drawGuidance(c: Canvas, r: RectF, g: RouteGuidanceState) {
+    private fun drawGuidance(
+        c: Canvas,
+        r: RectF,
+        g: RouteGuidanceState,
+        lanes: LaneGuidanceState
+    ) {
         val k = minOf(r.width() / 318f, r.height() / 152f, 1.2f)
         card(c, r, 24f * k)
         val pad = maxOf(10f, 14f * k)
@@ -608,9 +618,75 @@ class LauncherRenderer {
             text(c, g.roadName, tx, r.top + 70f * k, maxOf(11f, 15f * k),
                 SOFT, false, Paint.Align.LEFT, maxW)
         }
+        if (lanes.visible) {
+            drawLaneGuidance(c, r, k, lanes)
+        }
         val eta = g.etaMinutes?.let { " · ETA $it phút" }.orEmpty()
-        text(c, distance + eta, tx, r.bottom - 18f * k, maxOf(11f, 14f * k),
+        text(c, distance + eta, tx, r.bottom - 12f * k, maxOf(10f, 13f * k),
             ACCENT, true, Paint.Align.LEFT, maxW)
+    }
+
+    private fun drawLaneGuidance(
+        c: Canvas,
+        r: RectF,
+        k: Float,
+        state: LaneGuidanceState
+    ) {
+        val lanes = state.lanes.take(8)
+        if (lanes.isEmpty()) return
+        val gap = maxOf(2f, 3f * k)
+        val maxTotal = r.width() * 0.60f
+        val total = minOf(maxTotal, lanes.size * maxOf(24f, 34f * k))
+        val laneW = (total - gap * (lanes.size - 1)) / lanes.size
+        if (laneW < 14f) return
+        val h = maxOf(22f, 28f * k)
+        var x = r.right - maxOf(10f, 14f * k) - total
+        val top = r.bottom - maxOf(46f, 52f * k)
+        for (lane in lanes) {
+            val box = RectF(x, top, x + laneW, top + h)
+            fill.color = if (lane.recommended) {
+                Color.rgb(40, 165, 85)
+            } else {
+                Color.rgb(47, 58, 74)
+            }
+            c.drawRoundRect(box, h * 0.22f, h * 0.22f, fill)
+            edge.color = if (lane.recommended) {
+                Color.rgb(135, 245, 165)
+            } else {
+                Color.rgb(94, 108, 128)
+            }
+            edge.strokeWidth = maxOf(1f, 1.4f * k)
+            c.drawRoundRect(box, h * 0.22f, h * 0.22f, edge)
+            textMid(
+                c,
+                laneGlyph(lane.turns),
+                box.centerX(),
+                box.centerY(),
+                maxOf(11f, 15f * k),
+                Color.WHITE,
+                true,
+                box.width() * 0.88f
+            )
+            x += laneW + gap
+        }
+    }
+
+    private fun laneGlyph(turns: List<LaneTurn>): String {
+        if (turns.isEmpty()) return "·"
+        return turns.take(3).joinToString("") {
+            when (it) {
+                LaneTurn.LEFT -> "←"
+                LaneTurn.SLIGHT_LEFT -> "↖"
+                LaneTurn.SHARP_LEFT -> "←"
+                LaneTurn.THROUGH -> "↑"
+                LaneTurn.RIGHT -> "→"
+                LaneTurn.SLIGHT_RIGHT -> "↗"
+                LaneTurn.SHARP_RIGHT -> "→"
+                LaneTurn.REVERSE -> "↩"
+                LaneTurn.MERGE_LEFT -> "↖"
+                LaneTurn.MERGE_RIGHT -> "↗"
+            }
+        }
     }
 
     // ---------- lịch và sự kiện ----------
