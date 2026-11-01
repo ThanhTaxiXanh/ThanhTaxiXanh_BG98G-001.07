@@ -99,7 +99,11 @@ class PhoneDashboardActivity : Activity() {
                 else (location.speed * 3.6f).roundToInt()
             } else null
             maps.onLocation(location)
-            tripRecorder.onLocation(location, settings.recordTrips)
+            tripRecorder.onLocation(
+                location,
+                settings.recordTrips,
+                maps.streetName
+            )
             view.postInvalidateOnAnimation()
         }
     }

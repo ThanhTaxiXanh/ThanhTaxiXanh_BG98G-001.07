@@ -483,15 +483,54 @@ class MainActivity : Activity() {
             } ?: "đang ghi"
             val km = trip.distanceM / 1000.0
             val details = TextView(this).apply {
-                text = (if (trip.active) "● " else "") +
-                    "$start → $end\n" +
-                    String.format(java.util.Locale.getDefault(), "%.1f km", km) +
-                    "\n● %.5f, %.5f\n⚑ %.5f, %.5f".format(
+                val displayName = trip.name.ifBlank {
+                    if (trip.active) "Chuyến đang ghi" else "Chuyến đi"
+                }
+                val startPlace = trip.startLabel.ifBlank {
+                    String.format(
                         java.util.Locale.US,
-                        trip.startLat, trip.startLon,
-                        trip.endLat, trip.endLon
+                        "%.5f, %.5f",
+                        trip.startLat,
+                        trip.startLon
                     )
+                }
+                val endPlace = trip.endLabel.ifBlank {
+                    String.format(
+                        java.util.Locale.US,
+                        "%.5f, %.5f",
+                        trip.endLat,
+                        trip.endLon
+                    )
+                }
+                text = (if (trip.favorite) "☆ " else "") +
+                    displayName + "\n" +
+                    "$start → $end · " +
+                    String.format(java.util.Locale.getDefault(), "%.1f km", km) +
+                    "\n● $startPlace\n⚑ $endPlace"
                 textSize = 14f
+                setOnClickListener {
+                    val input = EditText(this@MainActivity).apply {
+                        setText(trip.name)
+                        hint = "Ví dụ: Quê Khách A"
+                        setSelection(text.length)
+                    }
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Tên chuyến đi")
+                        .setView(input)
+                        .setNegativeButton("Hủy", null)
+                        .setPositiveButton("Lưu") { _, _ ->
+                            runCatching {
+                                tripStore.setName(
+                                    trip.id,
+                                    input.text.toString()
+                                )
+                                refreshTrips()
+                            }.onFailure {
+                                logErr("MainActivity:tripRename", it)
+                            }
+                        }
+                        .show()
+                }
             }
             row.addView(
                 details,

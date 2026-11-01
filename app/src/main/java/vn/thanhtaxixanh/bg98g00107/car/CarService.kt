@@ -200,7 +200,11 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
                 else (location.speed * 3.6f).roundToInt()
             } else null
             maps.onLocation(location)
-            tripRecorder.onLocation(location, currentSettings.recordTrips)
+            tripRecorder.onLocation(
+                location,
+                currentSettings.recordTrips,
+                maps.streetName
+            )
             voiceAnnouncer.onGuidance(
                 maps.guidanceState,
                 speedKmh ?: 0,

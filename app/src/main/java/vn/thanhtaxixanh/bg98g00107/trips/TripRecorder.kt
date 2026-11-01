@@ -9,7 +9,11 @@ class TripRecorder(context: Context) {
     private val store = TripHistoryStore(app)
     private val prefs = app.getSharedPreferences("trip_recording_state", Context.MODE_PRIVATE)
 
-    fun onLocation(location: Location, enabled: Boolean) {
+    fun onLocation(
+        location: Location,
+        enabled: Boolean,
+        roadLabel: String = ""
+    ) {
         if (!location.hasAccuracy() || location.accuracy > 35f) return
         val timeMs = location.time.takeIf { it > 0L } ?: System.currentTimeMillis()
         val speed = if (location.hasSpeed() && location.speed >= 0f) {
@@ -37,7 +41,8 @@ class TripRecorder(context: Context) {
                 active = store.startTrip(
                     timeMs,
                     location.latitude,
-                    location.longitude
+                    location.longitude,
+                    roadLabel
                 )
             }
 
@@ -47,7 +52,8 @@ class TripRecorder(context: Context) {
                     timeMs,
                     location.latitude,
                     location.longitude,
-                    (speed * 3.6).roundToInt()
+                    (speed * 3.6).roundToInt(),
+                    roadLabel
                 )
 
                 val stoppedSince = prefs.getLong("stopped_since_ms", 0L)

@@ -16,6 +16,9 @@ data class SavedTrip(
     val startLon: Double,
     val endLat: Double,
     val endLon: Double,
+    val name: String,
+    val startLabel: String,
+    val endLabel: String,
     val favorite: Boolean,
     val active: Boolean
 )
@@ -28,7 +31,7 @@ data class SavedTripPoint(
 )
 
 class TripHistoryStore(context: Context) :
-    SQLiteOpenHelper(context.applicationContext, "ttx_trips_v1.db", null, 1) {
+    SQLiteOpenHelper(context.applicationContext, "ttx_trips_v1.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -41,6 +44,9 @@ class TripHistoryStore(context: Context) :
                 start_lon REAL NOT NULL,
                 end_lat REAL NOT NULL,
                 end_lon REAL NOT NULL,
+                name TEXT NOT NULL DEFAULT '',
+                start_label TEXT NOT NULL DEFAULT '',
+                end_label TEXT NOT NULL DEFAULT '',
                 favorite INTEGER NOT NULL DEFAULT 0,
                 active INTEGER NOT NULL DEFAULT 1
             )"""
@@ -64,19 +70,28 @@ class TripHistoryStore(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        throw IllegalStateException("Kho chuyến đi cần nâng cấp thủ công.")
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE trips ADD COLUMN name TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE trips ADD COLUMN start_label TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE trips ADD COLUMN end_label TEXT NOT NULL DEFAULT ''")
+        }
     }
 
     fun activeTrip(): SavedTrip? = readableDatabase.rawQuery(
         """SELECT id,started_ms,ended_ms,distance_m,start_lat,start_lon,
-            end_lat,end_lon,favorite,active
+            end_lat,end_lon,name,start_label,end_label,favorite,active
             FROM trips WHERE active=1 ORDER BY started_ms DESC LIMIT 1""",
         null
     ).use { c ->
         if (!c.moveToFirst()) null else row(c)
     }
 
-    fun startTrip(timeMs: Long, lat: Double, lon: Double): SavedTrip {
+    fun startTrip(
+        timeMs: Long,
+        lat: Double,
+        lon: Double,
+        startLabel: String = ""
+    ): SavedTrip {
         require(timeMs > 0L)
         require(valid(lat, lon))
         val id = "trip_$timeMs"
@@ -89,6 +104,9 @@ class TripHistoryStore(context: Context) :
             put("start_lon", lon)
             put("end_lat", lat)
             put("end_lon", lon)
+            put("name", "")
+            put("start_label", startLabel.trim().take(120))
+            put("end_label", startLabel.trim().take(120))
             put("favorite", 0)
             put("active", 1)
         }
@@ -103,7 +121,8 @@ class TripHistoryStore(context: Context) :
         timeMs: Long,
         lat: Double,
         lon: Double,
-        speedKmh: Int
+        speedKmh: Int,
+        endLabel: String = ""
     ): Boolean {
         require(tripId.isNotBlank() && timeMs > 0L && valid(lat, lon))
         val db = writableDatabase
@@ -139,11 +158,21 @@ class TripHistoryStore(context: Context) :
                 distanceM(lastLat!!, lastLon!!, lat, lon)
                     .takeIf { it in 0.0..500.0 } ?: 0.0
             } else 0.0
-            db.execSQL(
-                """UPDATE trips SET distance_m=distance_m+?,
-                   end_lat=?,end_lon=? WHERE id=? AND active=1""",
-                arrayOf(delta, lat, lon, tripId)
-            )
+            val label = endLabel.trim().take(120)
+            if (label.isBlank()) {
+                db.execSQL(
+                    """UPDATE trips SET distance_m=distance_m+?,
+                       end_lat=?,end_lon=? WHERE id=? AND active=1""",
+                    arrayOf(delta, lat, lon, tripId)
+                )
+            } else {
+                db.execSQL(
+                    """UPDATE trips SET distance_m=distance_m+?,
+                       end_lat=?,end_lon=?,end_label=?
+                       WHERE id=? AND active=1""",
+                    arrayOf(delta, lat, lon, label, tripId)
+                )
+            }
             db.setTransactionSuccessful()
             return true
         } finally {
@@ -155,6 +184,13 @@ class TripHistoryStore(context: Context) :
         writableDatabase.execSQL(
             "UPDATE trips SET active=0,ended_ms=? WHERE id=? AND active=1",
             arrayOf(endedMs, tripId)
+        )
+    }
+
+    fun setName(tripId: String, name: String) {
+        writableDatabase.execSQL(
+            "UPDATE trips SET name=? WHERE id=?",
+            arrayOf(name.trim().take(80), tripId)
         )
     }
 
@@ -171,7 +207,7 @@ class TripHistoryStore(context: Context) :
         val out = ArrayList<SavedTrip>()
         readableDatabase.rawQuery(
             """SELECT id,started_ms,ended_ms,distance_m,start_lat,start_lon,
-               end_lat,end_lon,favorite,active FROM trips
+               end_lat,end_lon,name,start_label,end_label,favorite,active FROM trips
                $where ORDER BY started_ms DESC LIMIT $safe""",
             null
         ).use { c ->
@@ -210,8 +246,11 @@ class TripHistoryStore(context: Context) :
         startLon = c.getDouble(5),
         endLat = c.getDouble(6),
         endLon = c.getDouble(7),
-        favorite = c.getInt(8) != 0,
-        active = c.getInt(9) != 0
+        name = c.getString(8),
+        startLabel = c.getString(9),
+        endLabel = c.getString(10),
+        favorite = c.getInt(11) != 0,
+        active = c.getInt(12) != 0
     )
 
     private fun valid(lat: Double, lon: Double): Boolean =
