@@ -413,10 +413,12 @@ class MainActivity : Activity() {
             setOnClickListener { refreshBRouterStatus() }
         })
         root.addView(TextView(this).apply {
-            text = "Tải RD5 trong BRouter: mở Download Manager → phóng to bản đồ → " +
-                "chọn khu vực cần chạy → Start Download. Bắc Ninh/Bắc Giang nằm " +
-                "trong ô E105_N20. Nếu cần toàn Việt Nam, chọn toàn bộ lãnh thổ " +
-                "trên bản đồ tải xuống."
+            text = "Bước 1 · Download Manager → phóng to bản đồ → chọn khu vực " +
+                "cần chạy → Start Download để tải RD5. Bắc Ninh/Bắc Giang nằm " +
+                "trong ô E105_N20. Nếu cần toàn Việt Nam, chọn toàn bộ lãnh thổ." +
+                "\n\nBước 2 · quay lại màn hình chính BRouter → BRouter App → " +
+                "chọn profile ô tô (ví dụ car-vario) → Server-Mode → gán profile " +
+                "cho motorcar / Fast. TTX gọi BRouter bằng v=motorcar, fast=1."
             textSize = 14f
             setTextColor(android.graphics.Color.rgb(80, 90, 105))
             setPadding(0, pad / 2, 0, 0)
