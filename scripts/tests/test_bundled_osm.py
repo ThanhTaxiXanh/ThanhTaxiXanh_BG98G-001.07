@@ -1,4 +1,4 @@
-"""Offline OSM V3.1 bundle regression without fetching the national PBF."""
+"""Offline OSM V3.3 bundle regression without fetching the national PBF."""
 import ast, pathlib, unittest
 SCRIPT=pathlib.Path(__file__).resolve().parents[1]/"build_vietnam_osm_bundle.py"
 ROOT=pathlib.Path(__file__).resolve().parents[2]
@@ -11,6 +11,8 @@ class BundledOsmStaticTests(unittest.TestCase):
         ast.parse(text)
         self.assertIn("class SpeedCorridor",text)
         self.assertIn("speed_way_ids=set()",text)
+        self.assertIn("lane_way_ids=set()",text)
+        self.assertIn("anchor_way_ids=set()",text)
         self.assertIn("corridor=set()",text)
         self.assertIn("way_intersects_corridor",text)
         self.assertIn("CREATE TABLE road_context(",text)
@@ -26,7 +28,14 @@ class BundledOsmStaticTests(unittest.TestCase):
 
     def test_context_is_not_entire_national_network(self):
         text=SCRIPT.read_text(encoding="utf-8")
-        self.assertIn("if not speed_tagged and not way_intersects_corridor",text)
+        self.assertIn(
+            "if way.id not in anchor_way_ids and not way_intersects_corridor",
+            text
+        )
+        self.assertIn(
+            "if not speed_tagged and not lane_tagged:",
+            text
+        )
         self.assertIn('counts["context_only_ways"]+=1',text)
         self.assertIn('"road_context_only_ways"',text)
 
@@ -34,6 +43,15 @@ class BundledOsmStaticTests(unittest.TestCase):
         text=SCRIPT.read_text(encoding="utf-8")
         self.assertIn("speed_tagged = way.id in speed_way_ids",text)
         self.assertIn('counts["ways_speed_tagged"]+=1',text)
+
+    def test_lane_guidance_anchors_are_preserved_without_full_network(self):
+        text=SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("LANE_GUIDANCE_TAGS",text)
+        self.assertIn("lane_tagged = way.id in lane_way_ids",text)
+        self.assertIn('counts["ways_lane_guidance_tagged"]+=1',text)
+        self.assertIn('"road_lane_guidance_ways"',text)
+        self.assertIn("turn_lanes_forward TEXT NOT NULL",text)
+        self.assertIn("destination_lanes_backward TEXT NOT NULL",text)
 
     def test_supported_motor_types_exclude_non_driving_objects(self):
         text=SCRIPT.read_text(encoding="utf-8")
@@ -51,6 +69,8 @@ class BundledOsmStaticTests(unittest.TestCase):
         self.assertIn("JOIN road_context AS r",text)
         self.assertIn("BundledRoadContext",text)
         self.assertIn("r.geometry_blob",text)
+        self.assertIn("r.turn_lanes_forward",text)
+        self.assertIn("r.destination_lanes_backward",text)
         self.assertIn("RoadGeometryCodec.decode",text)
 
 if __name__=="__main__":
