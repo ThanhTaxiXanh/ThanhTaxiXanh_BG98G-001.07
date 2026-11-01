@@ -8,6 +8,11 @@ import vn.thanhtaxixanh.bg98g00107.dashboard.DashboardSettingsRepository
 import vn.thanhtaxixanh.bg98g00107.dashboard.LauncherRenderer
 import vn.thanhtaxixanh.bg98g00107.dashboard.UiState
 import vn.thanhtaxixanh.bg98g00107.map.NativeMap
+import vn.thanhtaxixanh.bg98g00107.navigation.BRouterServiceClient
+import vn.thanhtaxixanh.bg98g00107.navigation.ManeuverType
+import vn.thanhtaxixanh.bg98g00107.navigation.RoutePlanStore
+import vn.thanhtaxixanh.bg98g00107.navigation.RoutePoint
+import vn.thanhtaxixanh.bg98g00107.navigation.RouteRequest
 import vn.thanhtaxixanh.bg98g00107.signs.SignsState
 
 import android.Manifest
@@ -131,6 +136,10 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
         (appCtx.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
     private var cachedBatteryPct = -1
     private var lastBatteryReadMs = Long.MIN_VALUE
+    private var rerouteClient: BRouterServiceClient? = null
+    private val routeStore by lazy { RoutePlanStore(appCtx) }
+    private var rerouteInFlight = false
+    private var lastRerouteMs = Long.MIN_VALUE
 
     private fun hasFineLocation(): Boolean =
         appCtx.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -186,6 +195,7 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
                 else (location.speed * 3.6f).roundToInt()
             } else null
             maps.onLocation(location)
+            maybeReroute(location)
         }
     }
 
@@ -225,6 +235,8 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
                 Lifecycle.Event.ON_DESTROY -> {
                     surfaceState.onDestroy()
                     stopUpdates()
+                    rerouteClient?.close()
+                    rerouteClient = null
                     maps.dispose()
                     surface?.release()
                     surface = null
@@ -298,6 +310,43 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
             return
         }
         renderer.hitMapPoint(x, y)?.let { maps.tap(it[0], it[1]) }
+    }
+
+
+    private fun maybeReroute(location: Location) {
+        if (maps.guidanceState.maneuver != ManeuverType.OFF_ROUTE) return
+        if (rerouteInFlight) return
+        if (!location.hasAccuracy() || location.accuracy > 30f) return
+        val destination = maps.routeDestination() ?: return
+        val now = SystemClock.uptimeMillis()
+        if (lastRerouteMs != Long.MIN_VALUE && now - lastRerouteMs < 30_000L) return
+
+        rerouteInFlight = true
+        lastRerouteMs = now
+        val client = rerouteClient ?: BRouterServiceClient(appCtx).also {
+            rerouteClient = it
+        }
+        val heading = if (location.hasBearing()) location.bearing.toDouble() else null
+        client.requestRoute(
+            RouteRequest(
+                start = RoutePoint(location.latitude, location.longitude),
+                destination = destination,
+                headingDegrees = heading
+            )
+        ) { result ->
+            rerouteInFlight = false
+            result.onSuccess { route ->
+                try {
+                    routeStore.saveRaw(route.rawJson)
+                    maps.setRoute(route.plan)
+                    draw()
+                } catch (e: Exception) {
+                    logErr("CarService:rerouteSave", e)
+                }
+            }.onFailure { e ->
+                logErr("CarService:reroute", e)
+            }
+        }
     }
 
     private fun refreshBatteryIfDue() {

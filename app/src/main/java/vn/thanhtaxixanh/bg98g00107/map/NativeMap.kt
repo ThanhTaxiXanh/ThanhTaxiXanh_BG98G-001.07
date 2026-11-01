@@ -7,6 +7,8 @@ import vn.thanhtaxixanh.bg98g00107.navigation.RouteGuidanceState
 import vn.thanhtaxixanh.bg98g00107.navigation.RoutePlan
 import vn.thanhtaxixanh.bg98g00107.navigation.RoutePlanStore
 import vn.thanhtaxixanh.bg98g00107.navigation.RouteProgressTracker
+import vn.thanhtaxixanh.bg98g00107.navigation.RoutePoint
+import vn.thanhtaxixanh.bg98g00107.navigation.RouteRenderSimplifier
 import vn.thanhtaxixanh.bg98g00107.gps.GpsFilter
 import vn.thanhtaxixanh.bg98g00107.gps.RoadSegment
 import vn.thanhtaxixanh.bg98g00107.gps.RoadSnapMatch
@@ -244,6 +246,8 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             updateRouteProgress()
         }
     }
+
+    fun routeDestination(): RoutePoint? = activeRoute?.points?.lastOrNull()
 
     fun clearRoute() {
         activeRoute = null
@@ -1334,8 +1338,9 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             source.setGeoJson(FeatureCollection.fromFeatures(emptyArray<Feature>()))
             return
         }
+        val renderPoints = RouteRenderSimplifier.reduce(plan.points)
         val line = LineString.fromLngLats(
-            plan.points.map { Point.fromLngLat(it.lon, it.lat) }
+            renderPoints.map { Point.fromLngLat(it.lon, it.lat) }
         )
         source.setGeoJson(Feature.fromGeometry(line))
     }
