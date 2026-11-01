@@ -90,7 +90,8 @@ internal class OfflineSpeedLimitResolver {
                 estimated = false,
                 upcoming = emptyList(),
                 status = "Đã khớp đường OSM nhưng chưa có giới hạn tốc độ",
-                roadWayId = match.wayId
+                roadWayId = match.wayId,
+                roadForward = match.forward
             )
         }
 
@@ -118,7 +119,8 @@ internal class OfflineSpeedLimitResolver {
             return SignsState(
                 null, false, emptyList(),
                 "OSM offline: giới hạn chưa xác định / điều kiện chưa hỗ trợ",
-                match.wayId
+                match.wayId,
+                match.forward
             )
         }
         return SignsState(
@@ -126,7 +128,8 @@ internal class OfflineSpeedLimitResolver {
             estimated = false,
             upcoming = emptyList(),
             status = "Giới hạn từ OSM offline (tham khảo)",
-            roadWayId = match.wayId
+            roadWayId = match.wayId,
+            roadForward = match.forward
         )
     }
 

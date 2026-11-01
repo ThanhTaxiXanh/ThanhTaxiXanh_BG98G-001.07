@@ -47,8 +47,10 @@ data class SignsState(
     val estimated: Boolean,
     val upcoming: List<UpcomingSign>,
     val status: String,
-    /** OSM way ID of the speed-limit source, not a lane identifier. */
-    val roadWayId: Long? = null
+    /** Stable matched OSM way ID used for speed/lane context. */
+    val roadWayId: Long? = null,
+    /** True follows OSM node order; false is backward traffic direction. */
+    val roadForward: Boolean? = null
 ) {
     companion object {
         val EMPTY = SignsState(null, false, emptyList(), "Đang chờ vị trí")
@@ -754,6 +756,14 @@ class RoadSigns(private val cacheFile: File, supplementalGeoJson: String = "") {
             shown == null -> "Giới hạn không xác định / điều kiện chưa xác minh"
             else -> "Giới hạn từ OSM (tham khảo)"
         }
-        return SignsState(shown, shownEst, ups, status, if (shown != null) match?.wayId else null)
+        val stableRoad = if (!transitionPending && w != null) match else null
+        return SignsState(
+            shown,
+            shownEst,
+            ups,
+            status,
+            stableRoad?.wayId,
+            stableRoad?.forward
+        )
     }
 }
