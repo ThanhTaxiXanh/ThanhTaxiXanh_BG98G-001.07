@@ -26,11 +26,14 @@ internal class YoloOnnxSignDetector(private val modelDir: File) {
     // Reuse one ONNX session across sampled frames instead of reloading per frame.
     private val env = OrtEnvironment.getEnvironment()
     private var activeSession: OrtSession? = null
+    private var activeOptions: OrtSession.SessionOptions? = null
 
     fun isReady() = model.isFile && model.length() > 100_000L
     fun resetModel() {
         activeSession?.close()
         activeSession = null
+        activeOptions?.close()
+        activeOptions = null
     }
     fun close() = resetModel()
 
@@ -39,8 +42,14 @@ internal class YoloOnnxSignDetector(private val modelDir: File) {
         val options = OrtSession.SessionOptions()
         return try {
             options.setIntraOpNumThreads(2)
-            env.createSession(model.absolutePath,options).also { activeSession=it }
-        } finally { options.close() }
+            env.createSession(model.absolutePath,options).also {
+                activeOptions=options
+                activeSession=it
+            }
+        } catch (e: Exception) {
+            options.close()
+            throw e
+        }
     }
 
     fun detect(bitmap: Bitmap): List<AiDetection> {
@@ -119,7 +128,6 @@ internal class YoloOnnxSignDetector(private val modelDir: File) {
                         }
                     }
                 } finally { scaled.recycle() }
-            }
         }
     }
 
