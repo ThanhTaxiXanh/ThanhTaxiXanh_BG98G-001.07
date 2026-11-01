@@ -28,7 +28,9 @@ data class RouteGuidanceState(
     val instruction: String,
     val roadName: String,
     val distanceMeters: Int?,
-    val etaMinutes: Int?
+    val etaMinutes: Int?,
+    val maneuverKey: Int = -1,
+    val exitNumber: Int = 0
 ) {
     init {
         require(distanceMeters == null || distanceMeters >= 0)

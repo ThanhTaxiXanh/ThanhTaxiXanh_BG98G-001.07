@@ -10,6 +10,7 @@ import vn.thanhtaxixanh.bg98g00107.dashboard.UiState
 import vn.thanhtaxixanh.bg98g00107.map.NativeMap
 import vn.thanhtaxixanh.bg98g00107.navigation.BRouterServiceClient
 import vn.thanhtaxixanh.bg98g00107.navigation.ManeuverType
+import vn.thanhtaxixanh.bg98g00107.navigation.NavigationVoiceAnnouncer
 import vn.thanhtaxixanh.bg98g00107.navigation.RoutePlanStore
 import vn.thanhtaxixanh.bg98g00107.navigation.RoutePoint
 import vn.thanhtaxixanh.bg98g00107.navigation.RouteRequest
@@ -140,6 +141,7 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
     private val routeStore by lazy { RoutePlanStore(appCtx) }
     private var rerouteInFlight = false
     private var lastRerouteMs = Long.MIN_VALUE
+    private val voiceAnnouncer = NavigationVoiceAnnouncer(appCtx)
 
     private fun hasFineLocation(): Boolean =
         appCtx.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -195,6 +197,11 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
                 else (location.speed * 3.6f).roundToInt()
             } else null
             maps.onLocation(location)
+            voiceAnnouncer.onGuidance(
+                maps.guidanceState,
+                speedKmh ?: 0,
+                SystemClock.uptimeMillis()
+            )
             maybeReroute(location)
         }
     }
@@ -237,6 +244,7 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
                     stopUpdates()
                     rerouteClient?.close()
                     rerouteClient = null
+                    voiceAnnouncer.shutdown()
                     maps.dispose()
                     surface?.release()
                     surface = null
@@ -338,6 +346,7 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
             result.onSuccess { route ->
                 try {
                     routeStore.saveRaw(route.rawJson)
+                    voiceAnnouncer.resetForNewRoute()
                     maps.setRoute(route.plan)
                     draw()
                 } catch (e: Exception) {
@@ -436,6 +445,7 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
     }
 
     private fun stopUpdates() {
+        voiceAnnouncer.stop()
         tickerRunning = false
         handler.removeCallbacks(ticker)
         unregisterLocation()

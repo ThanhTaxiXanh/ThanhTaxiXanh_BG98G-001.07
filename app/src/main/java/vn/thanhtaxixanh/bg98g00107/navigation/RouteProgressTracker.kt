@@ -36,7 +36,8 @@ class RouteProgressTracker {
                 instruction = "Đã lệch tuyến",
                 roadName = "",
                 distanceMeters = deviation.roundToInt(),
-                etaMinutes = remainingEta(route, nearest)
+                etaMinutes = remainingEta(route, nearest),
+                maneuverKey = nearest
             )
         }
         lastIndex = nearest
@@ -52,7 +53,8 @@ class RouteProgressTracker {
                     else "Tiếp tục đến điểm đến",
                 roadName = "",
                 distanceMeters = remain.roundToInt().coerceAtLeast(0),
-                etaMinutes = remainingEta(route, nearest)
+                etaMinutes = remainingEta(route, nearest),
+                maneuverKey = route.points.lastIndex
             )
         }
 
@@ -64,7 +66,9 @@ class RouteProgressTracker {
             instruction = instruction(maneuver),
             roadName = "",
             distanceMeters = distance,
-            etaMinutes = remainingEta(route, nearest)
+            etaMinutes = remainingEta(route, nearest),
+            maneuverKey = maneuver.trackIndex,
+            exitNumber = maneuver.exitNumber
         )
     }
 
