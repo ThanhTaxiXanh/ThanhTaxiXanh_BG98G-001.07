@@ -106,6 +106,10 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     var status = "Đang chờ"
     var frameW = 0
     var frameH = 0
+    var requestedFrameW = 0
+        private set
+    var requestedFrameH = 0
+        private set
     var streetName = ""
     var satUsed = 0
     var onFrame: (() -> Unit)? = null
@@ -244,6 +248,10 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
 
     fun running(): Boolean = vd != null
 
+    fun matchesRequestedSize(w: Int, h: Int, tolerancePx: Int = 3): Boolean =
+        kotlin.math.abs(requestedFrameW - w) < tolerancePx &&
+            kotlin.math.abs(requestedFrameH - h) < tolerancePx
+
     /**
      * Holds the published frame stable for one render pass. Capture writes only
      * to the back buffer and cannot recycle/reuse this bitmap until the block exits.
@@ -296,7 +304,13 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
 
     fun start(w: Int, h: Int) {
         if (vd != null || !startRetry.canAttempt(SystemClock.elapsedRealtime())) return
-        val renderSize = MapRenderResolutionPolicy.resolve(w, h, DPI)
+        requestedFrameW = w.coerceAtLeast(64)
+        requestedFrameH = h.coerceAtLeast(64)
+        val renderSize = MapRenderResolutionPolicy.resolve(
+            requestedFrameW,
+            requestedFrameH,
+            DPI
+        )
         val vw = renderSize.width
         val vh = renderSize.height
         if (perfDebug) {
@@ -326,6 +340,8 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                 reader = null
                 r.setOnImageAvailableListener(null, null)
                 r.close()
+                requestedFrameW = 0
+                requestedFrameH = 0
                 status = "Không tạo được màn hình ảo"
                 startRetry.recordFailure(SystemClock.elapsedRealtime())
                 return
@@ -424,6 +440,10 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             }
         }
         frameNotifyPending.set(false)
+        requestedFrameW = 0
+        requestedFrameH = 0
+        frameW = 0
+        frameH = 0
         lastCapturedFrameMs = Long.MIN_VALUE
         lastFrameMs = 0L
         interactionBoostUntilMs = 0L
@@ -496,39 +516,51 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                 0L
             }
             var copied = false
-            var bitmap: Bitmap? = null
+            var target: Bitmap? = null
             try {
                 val plane = img.planes[0]
                 val rw = plane.rowStride / plane.pixelStride
-                // Keep the frame lock for the entire copy: the UI can
-                // never draw a buffer while capture is writing into it.
-                // stop() also waits for the copy before recycling buffers.
-                synchronized(frameLock) {
-                    if (rd !== reader) return
+
+                // The back buffer was last published only before a completed
+                // frame swap. Because publication waits for frameLock and all
+                // renderers hold frameLock for their entire draw, no renderer
+                // can still own this back buffer here.
+                target = synchronized(frameLock) {
                     val candidate = backFrame
-                    val target = if (candidate == null ||
+                    if (candidate == null ||
                         candidate.width != rw ||
                         candidate.height != img.height ||
                         candidate.isRecycled) {
-                        Bitmap.createBitmap(rw, img.height, Bitmap.Config.ARGB_8888)
-                    } else candidate
-                    bitmap = target
-                    val buf = plane.buffer
-                    buf.rewind()
-                    target.copyPixelsFromBuffer(buf)
-                    if (rd !== reader) return
-                    val previous = publishedFrame
-                    publishedFrame = target
-                    backFrame = previous
-                    bitmap = null
-                    copied = true
+                        Bitmap.createBitmap(
+                            rw,
+                            img.height,
+                            Bitmap.Config.ARGB_8888
+                        )
+                    } else {
+                        candidate
+                    }
                 }
 
+                val bitmap = requireNotNull(target)
+                val buf = plane.buffer
+                buf.rewind()
+                bitmap.copyPixelsFromBuffer(buf)
+
+                // Swap only after the copy is complete. This lock is short:
+                // main-thread rendering never waits for copyPixelsFromBuffer().
+                synchronized(frameLock) {
+                    if (rd !== reader || sessionId != captureSessionId) return
+                    val previous = publishedFrame
+                    publishedFrame = bitmap
+                    backFrame = previous
+                    target = null
+                    copied = true
+                }
             } catch (e: Exception) {
                 status = "Lỗi khung hình: " + e.message
             } finally {
                 img.close()
-                bitmap?.let {
+                target?.let {
                     if (!it.isRecycled) it.recycle()
                 }
             }

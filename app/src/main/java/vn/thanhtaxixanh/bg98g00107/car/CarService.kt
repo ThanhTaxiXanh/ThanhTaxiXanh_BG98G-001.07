@@ -389,9 +389,7 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
         if (r.width() < 64f || r.height() < 64f) return
         val wantW = r.width().toInt()
         val wantH = r.height().toInt()
-        if (maps.running() &&
-            (kotlin.math.abs(maps.frameW - wantW) >= 3 ||
-                kotlin.math.abs(maps.frameH - wantH) >= 3)) {
+        if (maps.running() && !maps.matchesRequestedSize(wantW, wantH)) {
             maps.stop()
         }
         if (!maps.running()) maps.start(wantW, wantH)

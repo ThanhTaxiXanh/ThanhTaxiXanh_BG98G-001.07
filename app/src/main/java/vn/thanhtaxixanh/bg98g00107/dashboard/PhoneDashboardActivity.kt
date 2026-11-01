@@ -298,8 +298,7 @@ class PhoneDashboardActivity : Activity() {
         if (b.width < 64f || b.height < 64f) return
         val w = b.width.toInt()
         val h = b.height.toInt()
-        if (maps.running() && (abs(maps.frameW - w) >= 3 ||
-                abs(maps.frameH - h) >= 3)) maps.stop()
+        if (maps.running() && !maps.matchesRequestedSize(w, h)) maps.stop()
         if (!maps.running()) maps.start(w, h)
     }
 
