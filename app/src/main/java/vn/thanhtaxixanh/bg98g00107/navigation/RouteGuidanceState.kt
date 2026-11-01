@@ -5,7 +5,21 @@ package vn.thanhtaxixanh.bg98g00107.navigation
  * The renderer never invents turn instructions; inactive state means no route.
  */
 enum class ManeuverType {
-    STRAIGHT, LEFT, RIGHT, SLIGHT_LEFT, SLIGHT_RIGHT, U_TURN, ARRIVE
+    STRAIGHT,
+    LEFT,
+    RIGHT,
+    SLIGHT_LEFT,
+    SLIGHT_RIGHT,
+    SHARP_LEFT,
+    SHARP_RIGHT,
+    KEEP_LEFT,
+    KEEP_RIGHT,
+    U_TURN,
+    ROUNDABOUT,
+    EXIT_LEFT,
+    EXIT_RIGHT,
+    OFF_ROUTE,
+    ARRIVE
 }
 
 data class RouteGuidanceState(

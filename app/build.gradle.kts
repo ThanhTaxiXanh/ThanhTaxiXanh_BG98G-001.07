@@ -55,6 +55,10 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 
+    buildFeatures {
+        aidl = true
+    }
+
     // Phase 11A: fail build on Android Lint errors (without disabling checks).
     lint {
         abortOnError = true
