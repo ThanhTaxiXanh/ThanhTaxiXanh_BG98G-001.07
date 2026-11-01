@@ -483,28 +483,22 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             try {
                 val plane = img.planes[0]
                 val rw = plane.rowStride / plane.pixelStride
-                bitmap = synchronized(frameLock) {
+                // Keep the frame lock for the entire copy: the UI can
+                // never draw a buffer while capture is writing into it.
+                // stop() also waits for the copy before recycling buffers.
+                synchronized(frameLock) {
+                    if (rd !== reader) return
                     val candidate = backFrame
-                    if (candidate == null ||
+                    val target = if (candidate == null ||
                         candidate.width != rw ||
                         candidate.height != img.height ||
                         candidate.isRecycled) {
-                        Bitmap.createBitmap(
-                            rw,
-                            img.height,
-                            Bitmap.Config.ARGB_8888
-                        )
-                    } else {
-                        candidate
-                    }
-                }
-
-                val target = requireNotNull(bitmap)
-                val buf = plane.buffer
-                buf.rewind()
-                target.copyPixelsFromBuffer(buf)
-
-                synchronized(frameLock) {
+                        Bitmap.createBitmap(rw, img.height, Bitmap.Config.ARGB_8888)
+                    } else candidate
+                    bitmap = target
+                    val buf = plane.buffer
+                    buf.rewind()
+                    target.copyPixelsFromBuffer(buf)
                     if (rd !== reader) return
                     val previous = publishedFrame
                     publishedFrame = target
@@ -512,6 +506,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                     bitmap = null
                     copied = true
                 }
+
             } catch (e: Exception) {
                 status = "Lỗi khung hình: " + e.message
             } finally {
