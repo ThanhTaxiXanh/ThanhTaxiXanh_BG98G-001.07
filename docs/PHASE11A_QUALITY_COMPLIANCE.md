@@ -1,6 +1,6 @@
 # Phase 11A — Quality gates and Android Auto compliance review
 
-Date: 2026-10-25. Product: **AA Taxi Driver**,
+Date: 2026-10-25. Product: **TTX AALauncher**,
 `applicationId=vn.thanhtaxixanh.bg98g00107`.
 
 ## Confirmed regulatory/quality status

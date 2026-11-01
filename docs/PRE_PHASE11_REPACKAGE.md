@@ -2,7 +2,7 @@
 
 ## Requested identity
 
-- App label: **AA Taxi Driver**
+- App label: **TTX AALauncher**
 - Exact Android application ID: `vn.thanhtaxixanh.bg98g00107` (case-sensitive)
 - Gradle namespace: `vn.thanhtaxixanh.bg98g00107`
 - Kotlin packages: `vn.thanhtaxixanh.bg98g00107.car`, `.dashboard`, `.ui`,
@@ -10,14 +10,14 @@
   `.reports`, `.qr`, `.media`, `.core`
 - Source path: `app/src/main/java/vn/thanhtaxixanh/bg98g00107/`
 - Unit tests: `app/src/test/java/vn/thanhtaxixanh/bg98g00107/`
-- Artifact: `AA-Taxi-Driver-debug`
+- Artifact: `TTX-AALauncher-debug`
 
 ## Backward-compatibility warning (critical)
 
 Changing `applicationId` from `com.cartaxi.launcher` is **not** an
 in-place rename or an upgrade. Android treats this as a separate package
 with a separate UID and private data sandbox. The old app may coexist
-with AA Taxi Driver. Local preferences, QR originals and mirrors,
+with TTX AALauncher. Local preferences, QR originals and mirrors,
 traffic reports, event notifications, media URIs and offline road/sign
 cache cannot be read by the new app simply by renaming the package.
 Signing with the same key **does not** automatically move private data.
@@ -31,7 +31,7 @@ the previous application's sandbox.
 Existing `KEYTHANHTAXIXANH` and certificate names in CI refer to
 historical signing configuration. Changing application ID does not
 require the original signing key for side-by-side installation, but a
-published AA Taxi Driver app should consistently use an approved
+published TTX AALauncher app should consistently use an approved
 release signer for future updates.
 
 ## Refactor scope and checks
@@ -46,7 +46,7 @@ release signer for future updates.
   Android SDK `aapt` (in addition to build, unit tests and artifact).
 - GitHub repository name remains AALauncherGPT and its historical audit
   references are not renamed, to preserve previous commit/release links.
-- No code from legacy package is bundled inside AA Taxi Driver.
+- No code from legacy package is bundled inside TTX AALauncher.
 
 ## Phase 11 gates remain
 

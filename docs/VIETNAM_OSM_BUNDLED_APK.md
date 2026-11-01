@@ -6,7 +6,7 @@ The special GitHub Actions job `bundled_vietnam_osm` runs on pushes to
 to read actual OSM nodes and roads with `maxspeed*` tags, produces a
 spatially indexed SQLite database, compresses it, adds it to Android
 **debug** assets, and creates a separate APK artifact called
-`AA-Taxi-Driver-Vietnam-OSM-offline-debug`.
+`TTX-AALauncher-Vietnam-OSM-offline-debug`.
 
 Official source: https://download.geofabrik.de/asia/vietnam.html
 License: ODbL, © OpenStreetMap contributors.
@@ -58,7 +58,7 @@ signs/current law always take precedence.
 
 The CI-hosted PBF processing actually runs only when the special
 `bundled_vietnam_osm` job completes successfully; standard
-`AA-Taxi-Driver-debug` APK has no countrywide bundle. Never
+`TTX-AALauncher-debug` APK has no countrywide bundle. Never
 mistake green standard unit tests for successful PBF download/extraction.
 
 Downloading a 300+ MB PBF and processing national way references

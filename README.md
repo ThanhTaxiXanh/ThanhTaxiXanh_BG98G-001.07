@@ -1,6 +1,6 @@
-# AA Taxi Driver
+# TTX AALauncher
 
-Ứng dụng Android/Android Auto mã nguồn Kotlin. **Tên ứng dụng:** AA Taxi Driver. **applicationId và namespace:** `vn.thanhtaxixanh.bg98g00107`.
+Ứng dụng Android/Android Auto mã nguồn Kotlin. **Tên ứng dụng:** TTX AALauncher. **applicationId và namespace:** `vn.thanhtaxixanh.bg98g00107`.
 
 Mã nguồn được tách theo module chức năng dưới `app/src/main/java/vn/thanhtaxixanh/bg98g00107/`:
 
