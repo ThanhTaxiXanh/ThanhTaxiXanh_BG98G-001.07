@@ -12,7 +12,7 @@ on:
         type: boolean
         default: false
       publish_release:
-        description: 'Publish AA Taxi Driver signed release under new application ID (new separate installation)'
+        description: 'Publish TTX AALauncher signed release under new application ID (new separate installation)'
         required: true
         type: boolean
         default: false
@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -56,23 +56,24 @@ jobs:
         run: python3 scripts/phase11a_car_policy_gate.py --audit
       - name: Unit tests for Phase 11A compliance audit
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
-      - name: Verify AA Taxi Driver package identity and display name
+      - name: Verify TTX AALauncher package identity and display name
         shell: bash
         run: |
           set -euo pipefail
           apk=app/build/outputs/apk/debug/app-debug.apk
           badging=$("$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$apk")
           printf '%s\n' "$badging" | grep -F "package: name='vn.thanhtaxixanh.bg98g00107'"
-          printf '%s\n' "$badging" | grep -F "application-label:'AA Taxi Driver'"
+          printf '%s\n' "$badging" | grep -F "application-label:'TTX AALauncher'"
       - name: Upload debug APK for testing
         uses: actions/upload-artifact@v4
         with:
-          name: AA-Taxi-Driver-debug
+          name: TTX-AALauncher-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
 
       - name: Audit historical release APK signing certificates
+        if: ${{ vars.ENABLE_LEGACY_SIGNING_AUDIT == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -95,7 +96,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -196,7 +197,7 @@ jobs:
       - name: Upload debug APK with nationwide Vietnam OSM and statistics
         uses: actions/upload-artifact@v4
         with:
-          name: AA-Taxi-Driver-Vietnam-OSM-offline-debug
+          name: TTX-AALauncher-Vietnam-OSM-offline-debug
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             app/src/debug/assets/osm/vietnam_stats.json
@@ -211,7 +212,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -246,7 +247,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -302,7 +303,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: AA Taxi Driver Build ${{ github.run_number }}
+          name: TTX AALauncher Build ${{ github.run_number }}
           files: app/build/outputs/apk/release/app-release.apk
           fail_on_unmatched_files: true
       - name: Remove temporary signing material

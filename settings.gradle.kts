@@ -4,5 +4,5 @@ pluginManagement {
 dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
-rootProject.name = "CarTaxiLauncher"
+rootProject.name = "TTXAALauncher"
 include(":app")
