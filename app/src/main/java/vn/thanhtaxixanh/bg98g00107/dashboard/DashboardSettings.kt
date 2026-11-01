@@ -12,6 +12,15 @@ enum class MapThemeMode(val title: String) {
     DARK("Luôn dùng giao diện tối")
 }
 
+enum class MapLineColor(val title: String, val hex: String) {
+    GREEN("Xanh lá", "#16c94f"),
+    BLUE("Xanh dương", "#2d8cff"),
+    CYAN("Xanh cyan", "#00b8ff"),
+    YELLOW("Vàng", "#ffd43b"),
+    ORANGE("Cam", "#ff922b"),
+    MAGENTA("Tím hồng", "#e649d5")
+}
+
 data class DashboardSettings(
     val showCalendar: Boolean = true,
     val showQr: Boolean = true,
@@ -21,6 +30,7 @@ data class DashboardSettings(
     val map3d: Boolean = true,
     val rotateMapWithHeading: Boolean = true,
     val autoZoomBySpeed: Boolean = true,
+    val autoZoomReferenceMeters: Int = 120,
     val cameraLookAheadSeconds: Int = 4,
     val cameraTiltDegrees: Int = 58,
     val autoRecenterSeconds: Int = 15,
@@ -30,6 +40,9 @@ data class DashboardSettings(
     val avoidMotorways: Boolean = false,
     val avoidTollRoads: Boolean = false,
     val avoidUnpavedRoads: Boolean = true,
+    val rerouteDeviationM: Int = 50,
+    val routeLineColor: MapLineColor = MapLineColor.GREEN,
+    val tripLineColor: MapLineColor = MapLineColor.CYAN,
     val voiceSpeedWarnings: Boolean = true,
     val voiceCameraWarnings: Boolean = true,
     val announceSpeedLimitChanges: Boolean = true,
@@ -50,10 +63,12 @@ data class DashboardSettings(
         require(!useCustomLayout || customLayout != null) {
             "Không thể sử dụng bố cục tùy chỉnh chưa lưu."
         }
+        require(autoZoomReferenceMeters in 20..800)
         require(cameraLookAheadSeconds in 1..8)
         require(cameraTiltDegrees in 0..70)
         require(autoRecenterSeconds in 5..60)
         require(speedWarningToleranceKmh in 0..20)
+        require(rerouteDeviationM in 20..100)
     }
 }
 
@@ -94,6 +109,7 @@ internal object DashboardSettingsCodec {
             map3d = bool("map3d", true),
             rotateMapWithHeading = bool("rotateMapWithHeading", true),
             autoZoomBySpeed = bool("autoZoomBySpeed", true),
+            autoZoomReferenceMeters = int("autoZoomReferenceMeters", 120, 20..800),
             cameraLookAheadSeconds = int("cameraLookAheadSeconds", 4, 1..8),
             cameraTiltDegrees = int("cameraTiltDegrees", 58, 0..70),
             autoRecenterSeconds = int("autoRecenterSeconds", 15, 5..60),
@@ -103,6 +119,13 @@ internal object DashboardSettingsCodec {
             avoidMotorways = bool("avoidMotorways", false),
             avoidTollRoads = bool("avoidTollRoads", false),
             avoidUnpavedRoads = bool("avoidUnpavedRoads", true),
+            rerouteDeviationM = int("rerouteDeviationM", 50, 20..100),
+            routeLineColor = MapLineColor.valueOf(
+                obj.optString("routeLineColor", "GREEN")
+            ),
+            tripLineColor = MapLineColor.valueOf(
+                obj.optString("tripLineColor", "CYAN")
+            ),
             voiceSpeedWarnings = bool("voiceSpeedWarnings", true),
             voiceCameraWarnings = bool("voiceCameraWarnings", true),
             announceSpeedLimitChanges = bool("announceSpeedLimitChanges", true),
@@ -125,6 +148,7 @@ internal object DashboardSettingsCodec {
         .put("map3d", value.map3d)
         .put("rotateMapWithHeading", value.rotateMapWithHeading)
         .put("autoZoomBySpeed", value.autoZoomBySpeed)
+        .put("autoZoomReferenceMeters", value.autoZoomReferenceMeters)
         .put("cameraLookAheadSeconds", value.cameraLookAheadSeconds)
         .put("cameraTiltDegrees", value.cameraTiltDegrees)
         .put("autoRecenterSeconds", value.autoRecenterSeconds)
@@ -134,6 +158,9 @@ internal object DashboardSettingsCodec {
         .put("avoidMotorways", value.avoidMotorways)
         .put("avoidTollRoads", value.avoidTollRoads)
         .put("avoidUnpavedRoads", value.avoidUnpavedRoads)
+        .put("rerouteDeviationM", value.rerouteDeviationM)
+        .put("routeLineColor", value.routeLineColor.name)
+        .put("tripLineColor", value.tripLineColor.name)
         .put("voiceSpeedWarnings", value.voiceSpeedWarnings)
         .put("voiceCameraWarnings", value.voiceCameraWarnings)
         .put("announceSpeedLimitChanges", value.announceSpeedLimitChanges)

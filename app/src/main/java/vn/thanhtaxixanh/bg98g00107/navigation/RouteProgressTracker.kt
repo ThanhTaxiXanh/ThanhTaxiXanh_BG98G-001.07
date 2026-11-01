@@ -56,15 +56,18 @@ class RouteProgressTracker {
         lat: Double,
         lon: Double,
         headingDegrees: Double? = null,
-        accuracyM: Double? = null
+        accuracyM: Double? = null,
+        offRouteThresholdM: Double = 90.0
     ): RouteGuidanceState {
         val route = plan ?: return RouteGuidanceState.EMPTY
         val here = RoutePoint(lat, lon)
         val match = nearestSegment(route, here, headingDegrees)
-        val threshold = max(
-            90.0,
-            min(140.0, (accuracyM ?: 0.0).coerceAtLeast(0.0) * 2.5)
+        val configuredThreshold = offRouteThresholdM.coerceIn(20.0, 100.0)
+        val accuracyThreshold = min(
+            140.0,
+            (accuracyM ?: 0.0).coerceAtLeast(0.0) * 2.5
         )
+        val threshold = max(configuredThreshold, accuracyThreshold)
 
         if (match.distanceM > threshold) {
             badSamples++
