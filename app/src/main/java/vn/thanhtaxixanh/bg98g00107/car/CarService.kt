@@ -128,6 +128,7 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
     private var currentSettings = DashboardSettings()
     private val qrFile = File(appCtx.filesDir, "qr.png")
     private val maps = NativeMap(appCtx, handler)
+    private val tripRecorder = TripRecorder(appCtx)
     private val renderer = LauncherRenderer()
     private var gpsRegistered = false
     private var gnssRegistered = false
