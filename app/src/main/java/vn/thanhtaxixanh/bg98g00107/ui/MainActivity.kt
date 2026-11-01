@@ -21,6 +21,7 @@ import vn.thanhtaxixanh.bg98g00107.reports.TrafficReportKind
 import vn.thanhtaxixanh.bg98g00107.reports.TrafficReportLocation
 import vn.thanhtaxixanh.bg98g00107.reports.TrafficReportSeverity
 import vn.thanhtaxixanh.bg98g00107.reports.TrafficReportStore
+import vn.thanhtaxixanh.bg98g00107.trips.TripHistoryStore
 
 import android.Manifest
 import android.app.Activity
@@ -93,6 +94,9 @@ class MainActivity : Activity() {
     private lateinit var preview: ImageView
     private lateinit var eventBox: LinearLayout
     private lateinit var reportBox: LinearLayout
+    private lateinit var tripBox: LinearLayout
+    private var showFavoriteTripsOnly = false
+    private val tripStore by lazy { TripHistoryStore(applicationContext) }
     private var brouterStatus: TextView? = null
     private val reportStore by lazy {
         TrafficReportStore(File(filesDir, "traffic_reports_v1.json"))
@@ -166,13 +170,14 @@ class MainActivity : Activity() {
         val overview = module("overview", "Tổng quan")
         val dashboard = module("dashboard", "Dashboard")
         val mapSettings = module("map", "Bản đồ")
+        val trips = module("trips", "Chuyến đi")
         val brouter = module("brouter", "BRouter")
         val qr = module("qr", "QR")
         val media = module("media", "Media")
         val calendar = module("calendar", "Lịch")
         val traffic = module("traffic", "Giao thông")
         val modules = listOf(
-            overview, dashboard, mapSettings, brouter, qr, media, calendar, traffic
+            overview, dashboard, mapSettings, trips, brouter, qr, media, calendar, traffic
         )
 
         // ---------- Tổng quan ----------
@@ -221,6 +226,9 @@ class MainActivity : Activity() {
 
         // ---------- Bản đồ / camera dẫn đường ----------
         addDrivingMapSettings(mapSettings.body)
+
+        // ---------- Chuyến đi ----------
+        addTripModule(trips.body)
 
         // ---------- BRouter ----------
         addBRouterModule(brouter.body)
@@ -365,6 +373,148 @@ class MainActivity : Activity() {
         val initialIndex = modules.indexOfFirst { it.key == requestedModule }
             .takeIf { it >= 0 } ?: 0
         selectModule(initialIndex)
+    }
+
+    private fun addTripModule(root: LinearLayout) {
+        root.addView(TextView(this).apply {
+            text = "Chuyến đi của tôi"
+            textSize = 20f
+        })
+        val current = runCatching { settingsRepository.read() }
+            .getOrDefault(DashboardSettings())
+
+        fun toggle(
+            label: String,
+            selected: Boolean,
+            update: (DashboardSettings, Boolean) -> DashboardSettings
+        ) {
+            val box = CheckBox(this).apply {
+                text = label
+                isChecked = selected
+            }
+            box.setOnCheckedChangeListener { _, checked ->
+                runCatching {
+                    settingsRepository.change { latest ->
+                        update(latest, checked)
+                    }
+                }.onFailure {
+                    logErr("MainActivity:tripToggle", it)
+                }
+            }
+            root.addView(box)
+        }
+
+        toggle("Ghi lại chuyến đi", current.recordTrips) { v, checked ->
+            v.copy(recordTrips = checked)
+        }
+        toggle(
+            "Hiển thị chuyến đi hiện tại trên bản đồ",
+            current.showCurrentTrip
+        ) { v, checked ->
+            v.copy(showCurrentTrip = checked)
+        }
+
+        val filters = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        filters.addView(Button(this).apply {
+            text = "NHẬT KÝ"
+            isAllCaps = false
+            setOnClickListener {
+                showFavoriteTripsOnly = false
+                refreshTrips()
+            }
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        filters.addView(Button(this).apply {
+            text = "YÊU THÍCH"
+            isAllCaps = false
+            setOnClickListener {
+                showFavoriteTripsOnly = true
+                refreshTrips()
+            }
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        root.addView(filters)
+
+        tripBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        root.addView(tripBox)
+        refreshTrips()
+    }
+
+    private fun refreshTrips() {
+        if (!::tripBox.isInitialized) return
+        tripBox.removeAllViews()
+        val trips = try {
+            tripStore.list(80, showFavoriteTripsOnly)
+        } catch (e: Exception) {
+            logErr("MainActivity:tripRead", e)
+            tripBox.addView(TextView(this).apply {
+                text = "Không đọc được lịch sử chuyến đi."
+            })
+            return
+        }
+        if (trips.isEmpty()) {
+            tripBox.addView(TextView(this).apply {
+                text = if (showFavoriteTripsOnly) {
+                    "(chưa có chuyến yêu thích)"
+                } else {
+                    "(chưa có chuyến nào được ghi)"
+                }
+            })
+            return
+        }
+
+        val format = java.text.SimpleDateFormat(
+            "HH:mm · dd/MM/yyyy",
+            java.util.Locale.getDefault()
+        )
+        for (trip in trips) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, pad / 3, 0, pad / 3)
+            }
+            val start = format.format(java.util.Date(trip.startedMs))
+            val end = trip.endedMs?.let {
+                java.text.SimpleDateFormat(
+                    "HH:mm",
+                    java.util.Locale.getDefault()
+                ).format(java.util.Date(it))
+            } ?: "đang ghi"
+            val km = trip.distanceM / 1000.0
+            val details = TextView(this).apply {
+                text = (if (trip.active) "● " else "") +
+                    "$start → $end\n" +
+                    String.format(java.util.Locale.getDefault(), "%.1f km", km) +
+                    "\n● %.5f, %.5f\n⚑ %.5f, %.5f".format(
+                        java.util.Locale.US,
+                        trip.startLat, trip.startLon,
+                        trip.endLat, trip.endLon
+                    )
+                textSize = 14f
+            }
+            row.addView(
+                details,
+                LinearLayout.LayoutParams(
+                    0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    1f
+                )
+            )
+            row.addView(Button(this).apply {
+                text = if (trip.favorite) "★" else "☆"
+                textSize = 20f
+                setOnClickListener {
+                    runCatching {
+                        tripStore.setFavorite(trip.id, !trip.favorite)
+                        refreshTrips()
+                    }.onFailure {
+                        logErr("MainActivity:tripFavorite", it)
+                    }
+                }
+            })
+            tripBox.addView(row)
+        }
     }
 
     private fun addBRouterModule(root: LinearLayout) {
@@ -1703,6 +1853,7 @@ class MainActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
+        refreshTrips()
         val token = SessionToken(this, ComponentName(this, LocalAudioService::class.java))
         val future = MediaController.Builder(this, token).buildAsync()
         mediaFuture = future
