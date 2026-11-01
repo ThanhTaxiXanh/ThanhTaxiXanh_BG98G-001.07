@@ -26,3 +26,14 @@ Camera-based lane segmentation is a separate model task (YOLOv8-seg/road segment
 
 ## Next steps
 (1) Test actual A500S video and original GPSData sidecar to implement timestamp-aligned coordinates; (2) train/benchmark Viet Nam speed-sign value OCR and lane segmentation; (3) match reviewed signs to directional OSM way segments with applicability/end sign rules before using them for on-map legal speed displays; (4) optional live bridge only if firmware/API compatibility is independently verified.
+
+
+## VTSR preset and xADAS interoperability (November 1, 2026)
+- User-confirmed download of VTSR INT8 and mapping from liamxdev/vtsr on Hugging Face (AGPL-3.0).
+- Model remains private to device. Validate raw 56-class output and ONNX metadata class order before activation. Never infer class order from unordered descriptions.
+- Warm ONNX session is reused during offline video sampling. Real device testing is still required.
+- Current Google Play xADAS package com.kaibatech.drivedeck.xadas advertises Wi-Fi dashcams including 70mai, but does not publish an A500S-specific raw-video API.
+- AppPage lists xADAS v0.2.5 with a Pro setting to share lead distance and too-close warnings, not raw video.
+- Third-party mirrored APK was only v0.1.11; too old for current Wi-Fi interoperability. No current APK has been acquired or debugged.
+- TTX offers a button opening the installed xADAS app for camera-source configuration. No undocumented IPC is called.
+- Pilot is ambiguous; no autonomous-driving/vehicle-control integration is claimed or added. Identify exact Pilot model/app first.
