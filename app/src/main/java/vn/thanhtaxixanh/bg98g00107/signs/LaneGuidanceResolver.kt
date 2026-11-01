@@ -71,6 +71,7 @@ internal object LaneGuidanceResolver {
         val destinations = raw.destinations?.let(::splitPreserve)
             ?.takeIf { it.size == turnValues.size }
         val target = targetTurns(maneuver)
+        if (target.isEmpty()) return LaneGuidanceState.EMPTY
         val lanes = parsedTurns.mapIndexed { index, turns ->
             LaneGuidanceLane(
                 turns = turns,
@@ -82,15 +83,12 @@ internal object LaneGuidanceResolver {
                     turns.any { it in target }
             )
         }
+        if (lanes.none { it.recommended }) return LaneGuidanceState.EMPTY
         return LaneGuidanceState(
             lanes = lanes,
             destination = raw.destination?.trim()?.takeIf { it.isNotEmpty() },
             roadWayId = road.geometry.wayId,
-            status = if (lanes.any { it.recommended }) {
-                "Hướng dẫn làn từ OpenStreetMap"
-            } else {
-                "Có dữ liệu làn OSM; chưa xác định làn khuyến nghị"
-            }
+            status = "Hướng dẫn làn từ OpenStreetMap"
         )
     }
 

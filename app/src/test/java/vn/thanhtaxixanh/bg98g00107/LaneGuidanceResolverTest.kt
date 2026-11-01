@@ -106,6 +106,32 @@ class LaneGuidanceResolverTest {
         assertFalse(state.visible)
     }
 
+    @Test fun unsupportedManeuverNeverShowsRawLaneArrows() {
+        val state = LaneGuidanceResolver.resolve(
+            road(
+                oneway = 1,
+                lanes = 2,
+                turn = "through|right"
+            ),
+            forward = true,
+            maneuver = ManeuverType.OFF_ROUTE
+        )
+        assertFalse(state.visible)
+    }
+
+    @Test fun noMatchingRecommendedLaneIsHidden() {
+        val state = LaneGuidanceResolver.resolve(
+            road(
+                oneway = 1,
+                lanes = 2,
+                turn = "left|through"
+            ),
+            forward = true,
+            maneuver = ManeuverType.RIGHT
+        )
+        assertFalse(state.visible)
+    }
+
     @Test fun unknownOsmTurnTokenIsRejectedRatherThanGuessed() {
         val state = LaneGuidanceResolver.resolve(
             road(
