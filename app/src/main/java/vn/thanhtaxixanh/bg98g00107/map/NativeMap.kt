@@ -117,6 +117,8 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     private val offlineSpeedResolver = OfflineSpeedLimitResolver()
     private var offlineRoadContext: List<BundledRoadContext> = emptyList()
     private var lastOfflineRoadFetchMs = -10_000L
+    private var lastOfflineRoadLat = Double.NaN
+    private var lastOfflineRoadLon = Double.NaN
     private var offlineRoadLoading = false
     private var regionMarkers: List<vn.thanhtaxixanh.bg98g00107.signs.RegionalOsmStore.Marker> =
         emptyList()
@@ -184,6 +186,9 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     private var dnInit = false
     private var lastStreetMs = 0L
     private var lastStreetSeen = 0L
+    private var lastStreetQueryMs = 0L
+    private var lastStreetQueryLat = Double.NaN
+    private var lastStreetQueryLon = Double.NaN
 
     private val loop = object : Runnable {
         override fun run() {
@@ -343,6 +348,11 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         offlineSpeedResolver.reset()
         offlineRoadLoading = false
         lastOfflineRoadFetchMs = -10_000L
+        lastOfflineRoadLat = Double.NaN
+        lastOfflineRoadLon = Double.NaN
+        lastStreetQueryMs = 0L
+        lastStreetQueryLat = Double.NaN
+        lastStreetQueryLon = Double.NaN
         if (perfDebug) performance.reset(SystemClock.elapsedRealtime())
     }
 
@@ -642,7 +652,9 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
 
     private fun ensureRoads(lat: Double, lon: Double) {
         val now = SystemClock.elapsedRealtime()
-        if (segs.isNotEmpty() && now - segMs < 4000L && dist(lat, lon, segCenterLat, segCenterLon) < 80.0) return
+        // The current segment cache covers a ~400 m tile neighborhood. Re-query
+        // only after the vehicle actually leaves the local matching area.
+        if (segs.isNotEmpty() && dist(lat, lon, segCenterLat, segCenterLon) < 80.0) return
         val st = map?.style ?: return
         try {
             val src = st.sources.firstOrNull { it is VectorSource } as? VectorSource ?: return
@@ -894,11 +906,15 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             offlineSpeedResolver.reset()
             return
         }
-        if (offlineRoadLoading || elapsed - lastOfflineRoadFetchMs < 1_500L) return
-        lastOfflineRoadFetchMs = elapsed
-        offlineRoadLoading = true
+        if (offlineRoadLoading || elapsed - lastOfflineRoadFetchMs < 750L) return
         val qLat = tLat
         val qLon = tLon
+        if (lastOfflineRoadLat.isFinite() && lastOfflineRoadLon.isFinite() &&
+            dist(qLat, qLon, lastOfflineRoadLat, lastOfflineRoadLon) < 25.0) return
+        lastOfflineRoadFetchMs = elapsed
+        lastOfflineRoadLat = qLat
+        lastOfflineRoadLon = qLon
+        offlineRoadLoading = true
         reportWorker.execute {
             val roads = try {
                 nationalBundle.nearbyRoadContext(qLat, qLon, 120.0, 300)
@@ -1139,6 +1155,12 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
 
     private fun refreshStreet(nowMs: Long) {
         if (!hasFix) return
+        if (lastStreetQueryLat.isFinite() && lastStreetQueryLon.isFinite() &&
+            nowMs - lastStreetQueryMs < 8_000L &&
+            dist(dLat, dLon, lastStreetQueryLat, lastStreetQueryLon) < 20.0) return
+        lastStreetQueryMs = nowMs
+        lastStreetQueryLat = dLat
+        lastStreetQueryLon = dLon
         val st = map?.style ?: return
         try {
             val src = st.sources.firstOrNull { it is VectorSource } as? VectorSource ?: return
