@@ -282,8 +282,9 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
 
     fun start(w: Int, h: Int) {
         if (vd != null || !startRetry.canAttempt(SystemClock.elapsedRealtime())) return
-        val vw = maxOf(64, w / 2 * 2)
-        val vh = maxOf(64, h / 2 * 2)
+        val renderSize = MapRenderResolutionPolicy.resolve(w, h, DPI)
+        val vw = renderSize.width
+        val vh = renderSize.height
         if (perfDebug) {
             performance.reset(SystemClock.elapsedRealtime())
             performance.startMapLoad(SystemClock.elapsedRealtime())
@@ -298,7 +299,14 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             val dm = appCtx.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
             val flags = DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION
-            val d = dm.createVirtualDisplay("CarTaxiMap", vw, vh, DPI, r.surface, flags)
+            val d = dm.createVirtualDisplay(
+                "CarTaxiMap",
+                vw,
+                vh,
+                renderSize.dpi,
+                r.surface,
+                flags
+            )
             if (d == null) {
                 reader = null
                 r.setOnImageAvailableListener(null, null)
