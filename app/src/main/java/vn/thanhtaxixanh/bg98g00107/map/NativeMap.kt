@@ -103,7 +103,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         private val SKIP_CLASS = setOf("rail", "transit", "ferry", "aerialway", "path", "pedestrian", "track", "pier")
     }
 
-    var status = "Đang chờ"
+    @Volatile var status = "Đang chờ"
     var frameW = 0
     var frameH = 0
     var requestedFrameW = 0
