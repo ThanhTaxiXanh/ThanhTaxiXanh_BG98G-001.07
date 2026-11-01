@@ -427,6 +427,11 @@ class MainActivity : Activity() {
             current.voiceCameraWarnings
         ) { v, checked -> v.copy(voiceCameraWarnings = checked) }
 
+        toggle(
+            "Hiển thị hướng dẫn làn giao thông",
+            current.showLaneGuidance
+        ) { v, checked -> v.copy(showLaneGuidance = checked) }
+
         val label = TextView(this).apply {
             textSize = 15f
         }

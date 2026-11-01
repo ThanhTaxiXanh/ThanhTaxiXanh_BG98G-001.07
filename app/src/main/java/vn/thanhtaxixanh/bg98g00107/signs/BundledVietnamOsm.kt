@@ -26,18 +26,18 @@ internal data class BundledRoadContext(
     val forwardConditional: String?,
     val backwardConditional: String?,
     val hasSpeedTag: Boolean,
-    val lanes: Int?,
-    val forwardLanes: Int?,
-    val backwardLanes: Int?,
-    val turnLanes: String?,
-    val turnLanesForward: String?,
-    val turnLanesBackward: String?,
-    val destination: String?,
-    val destinationForward: String?,
-    val destinationBackward: String?,
-    val destinationLanes: String?,
-    val destinationLanesForward: String?,
-    val destinationLanesBackward: String?
+    val lanes: Int? = null,
+    val forwardLanes: Int? = null,
+    val backwardLanes: Int? = null,
+    val turnLanes: String? = null,
+    val turnLanesForward: String? = null,
+    val turnLanesBackward: String? = null,
+    val destination: String? = null,
+    val destinationForward: String? = null,
+    val destinationBackward: String? = null,
+    val destinationLanes: String? = null,
+    val destinationLanesForward: String? = null,
+    val destinationLanesBackward: String? = null
 )
 
 /**

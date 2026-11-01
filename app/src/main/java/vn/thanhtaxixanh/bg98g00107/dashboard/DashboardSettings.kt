@@ -46,6 +46,7 @@ data class DashboardSettings(
     val voiceSpeedWarnings: Boolean = true,
     val voiceCameraWarnings: Boolean = true,
     val announceSpeedLimitChanges: Boolean = true,
+    val showLaneGuidance: Boolean = true,
     /** Personal notes only, never authoritative traffic signs. */
     val showPersonalReportsOnMap: Boolean = false,
     // Fresh installs default to three full-width utility rows on the right.
@@ -129,6 +130,7 @@ internal object DashboardSettingsCodec {
             voiceSpeedWarnings = bool("voiceSpeedWarnings", true),
             voiceCameraWarnings = bool("voiceCameraWarnings", true),
             announceSpeedLimitChanges = bool("announceSpeedLimitChanges", true),
+            showLaneGuidance = bool("showLaneGuidance", true),
             showPersonalReportsOnMap = bool("showPersonalReportsOnMap", false),
             layoutPresetId = obj.optString("layoutPresetId", "classic"),
             useCustomLayout = bool("useCustomLayout", false),
@@ -164,6 +166,7 @@ internal object DashboardSettingsCodec {
         .put("voiceSpeedWarnings", value.voiceSpeedWarnings)
         .put("voiceCameraWarnings", value.voiceCameraWarnings)
         .put("announceSpeedLimitChanges", value.announceSpeedLimitChanges)
+        .put("showLaneGuidance", value.showLaneGuidance)
         .put("showPersonalReportsOnMap", value.showPersonalReportsOnMap)
         .put("layoutPresetId", value.layoutPresetId)
         .put("useCustomLayout", value.useCustomLayout)

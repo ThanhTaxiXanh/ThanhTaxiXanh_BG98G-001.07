@@ -213,7 +213,16 @@ class LauncherRenderer {
 
         drawMain(c, main, st)
         if (st.guidance.active) {
-            drawGuidance(c, cal, st.guidance, st.laneGuidance)
+            drawGuidance(
+                c,
+                cal,
+                st.guidance,
+                if (st.settings.showLaneGuidance) {
+                    st.laneGuidance
+                } else {
+                    LaneGuidanceState.EMPTY
+                }
+            )
         }
         else if (st.settings.showCalendar) drawCalendar(c, cal, st)
         else drawDisabledPanel(c, cal, "Lịch đã ẩn")
