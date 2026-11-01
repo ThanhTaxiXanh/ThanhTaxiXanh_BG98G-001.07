@@ -10,6 +10,8 @@
 
     <queries>
         <package android:name="btools.routingapp" />
+        <!-- Optional official xADAS integration discovery, no privileged access. -->
+        <package android:name="com.kaibatech.drivedeck.xadas" />
     </queries>
 
     <application

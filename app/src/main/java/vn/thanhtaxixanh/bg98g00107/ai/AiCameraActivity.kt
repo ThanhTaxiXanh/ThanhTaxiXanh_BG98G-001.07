@@ -27,12 +27,41 @@ class AiCameraActivity : Activity() {
         body.addView(label("TTX AI Camera · Xác minh biển báo"))
         body.addView(label("70mai A500S Plus: tải video/ảnh bằng ứng dụng 70mai rồi nhập vào đây. " +
             "Chưa có RTSP/API live được xác minh. Video tải về không tự mang GPS gốc."))
-        body.addView(label("YOLOv8 ONNX cần model biển báo Việt Nam và labels.txt đúng thứ tự. " +
-            "Phát hiện chỉ là đề xuất, không phải giới hạn tốc độ đã xác minh."))
+        body.addView(label("VTSR YOLOv8 INT8 có thể lấy thứ tự 56 lớp từ metadata ONNX. " +
+            "Nếu dùng mô hình khác, hãy nhập labels.txt. AI chỉ đề xuất, không thay thế biển thật."))
         info=label("")
         body.addView(info)
+        body.addView(button("Cài VTSR YOLOv8n · 56 biển Việt Nam") {
+            AlertDialog.Builder(this)
+                .setTitle("Tải mô hình VTSR từ Hugging Face")
+                .setMessage("VTSR INT8 từ liamxdev/vtsr, 56 loại biển báo, giấy phép AGPL-3.0. "+
+                    "TTX sẽ tải mô hình trực tiếp trên điện thoại sau khi bạn đồng ý; "+
+                    "cần kết nối mạng và có thể tốn dữ liệu. Mọi phát hiện vẫn chờ duyệt.")
+                .setPositiveButton("Tôi đồng ý và tải") { _,_ ->
+                    worker.execute {
+                        try {
+                            importer.installVtsr { update(it) }
+                            update("Đã chuẩn bị VTSR; thử ảnh 70mai để kiểm tra.")
+                        } catch (e: Exception) {
+                            update("VTSR chưa cài thành công: " + e.message)
+                        }
+                    }
+                }.setNegativeButton("Hủy",null).show()
+        })
         body.addView(button("Nhập mô hình YOLOv8 ONNX") { pick(1,"*/*") })
-        body.addView(button("Nhập labels.txt") { pick(2,"text/*") })
+        body.addView(button("Nhập labels.txt (mô hình tùy chỉnh)") { pick(2,"text/*") })
+        body.addView(button("Mở xADAS để cấu hình nguồn 70mai / Chia sẻ dữ liệu Pro") {
+            val packageName="com.kaibatech.drivedeck.xadas"
+            val launch=packageManager.getLaunchIntentForPackage(packageName)
+            if (launch!=null) {
+                startActivity(launch)
+            } else {
+                startActivity(Intent(Intent.ACTION_VIEW,
+                    Uri.parse("https://play.google.com/store/apps/details?id="+packageName)))
+            }
+        })
+        body.addView(label("xADAS 0.2.5 có thông báo chia sẻ khoảng cách/cảnh báo với app khác ở "+
+            "bản Pro; TTX chưa nhận trực tiếp luồng video hoặc dữ liệu khi chưa có tài liệu API."))
         body.addView(button("Phân tích ảnh/video đã tải từ 70mai") {
             pick(3,"*/*",arrayOf("image/*","video/*"))
         })
@@ -162,6 +191,8 @@ class AiCameraActivity : Activity() {
             }.setNeutralButton("Để sau",null).show()
     }
     override fun onDestroy() {
-        worker.shutdownNow();super.onDestroy()
+        worker.execute { importer.close() }
+        worker.shutdown()
+        super.onDestroy()
     }
 }

@@ -21,7 +21,14 @@ internal class AiCameraImporter(private val context: Context) {
     private val review = AiReviewStore(context)
     fun isReady() = detector.isReady()
 
+    fun installVtsr(progress: (String) -> Unit): String {
+        // All importer operations are serialized on the activity's AI worker.
+        detector.resetModel()
+        return VtsrModelInstaller(modelDir).install(progress)
+    }
+
     fun install(uri: Uri, model: Boolean) {
+        detector.resetModel()
         val destination=File(modelDir,if (model) "traffic_signs.onnx" else "labels.txt")
         val temp=File(modelDir,destination.name+".part")
         val max=if (model) 120_000_000L else 100_000L
@@ -44,6 +51,8 @@ internal class AiCameraImporter(private val context: Context) {
             require(temp.renameTo(destination)) { "Không thể cài model/labels" }
         } finally { temp.delete() }
     }
+
+    fun close() = detector.close()
 
     fun scan(uri: Uri, notify: (String)->Unit): Int {
         require(detector.isReady()) { "Cần nhập mô hình ONNX và labels.txt" }

@@ -42,10 +42,16 @@ internal class VtsrModelInstaller(private val modelDir: File) {
             val mapping=VtsrLabelMapping.fromJson(pendingMapping.readText(),56)
             progress("Đang xác minh kiến trúc và thứ tự 56 lớp")
             val labels=validateModel(pendingModel,mapping)
-            val digest=MessageDigest.getInstance("SHA-256")
-                .digest(pendingModel.readBytes()).joinToString("") {
-                    "%02x".format(it)
+            val sha=MessageDigest.getInstance("SHA-256")
+            pendingModel.inputStream().use { input ->
+                val buffer=ByteArray(64*1024)
+                while (true) {
+                    val n=input.read(buffer)
+                    if (n<0) break
+                    sha.update(buffer,0,n)
                 }
+            }
+            val digest=sha.digest().joinToString("") { "%02x".format(it) }
             require(labels.size==56) { "Thiếu 56 nhãn chuẩn từ model" }
             // Labels are from ONNX class-order metadata or indexed mapping,
             // never from sorted sign descriptions.
