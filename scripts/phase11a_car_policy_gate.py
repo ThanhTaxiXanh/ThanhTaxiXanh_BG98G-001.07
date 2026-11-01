@@ -49,10 +49,15 @@ def evaluate(root: pathlib.Path) -> dict[str, object]:
     info = audit(debug, car, renderer)
     info["production_navigation_declared"] = declared_navigation(main)
     info["debug_navigation_declared"] = info["navigation_category"]
+    # Personal-use debug builds intentionally show the full multi-tile dashboard.
+    # Production still excludes CarService entirely, so the custom surface cannot
+    # silently leak into the release manifest.
     info["experimental_multitile_debug_only"] = (
-        "currentSettings.experimentalCarDashboard" in car
+        "private val isDebuggable" in car
         and "ApplicationInfo.FLAG_DEBUGGABLE" in car
+        and "if (isDebuggable)" in car
         and "renderer.render(" in car
+        and "renderer.renderNavigationSurface(" in car
     )
     info["debug_only_car_service"] = (
         not declared_navigation(main)
