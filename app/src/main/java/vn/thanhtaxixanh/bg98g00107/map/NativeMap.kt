@@ -766,15 +766,19 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
 
     private fun toggleTilt() {
         boostInteraction()
-        cameraController.toggleTilt()
-        tiltBtn?.text = if (cameraController.tiltDegrees > 0.0) "3D" else "2D"
-        // Changing 2D/3D during manual pan must not recenter the vehicle.
-        if (!cameraController.following) {
-            map?.let { m ->
-                m.moveCamera(CameraUpdateFactory.newCameraPosition(
-                    CameraPosition.Builder(m.cameraPosition).tilt(cameraController.tiltDegrees).build()
-                ))
-            }
+        val next = !cameraSettings.map3d
+        cameraSettings = cameraSettings.copy(map3d = next)
+        runCatching { settingsStore.save(cameraSettings) }
+            .onFailure { logErr("NativeMap:saveMap3d", it) }
+        tiltBtn?.text = if (next) "3D" else "2D"
+        map?.let { m ->
+            m.moveCamera(
+                CameraUpdateFactory.newCameraPosition(
+                    CameraPosition.Builder(m.cameraPosition)
+                        .tilt(configuredTilt())
+                        .build()
+                )
+            )
         }
     }
 
@@ -1574,8 +1578,8 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         m.setStyle(Style.Builder().fromUri(STYLE)) { style ->
             if (night) themeNight(style)
             tuneLabels(style)
-            installRoute(style)
             installCurrentTrip(style)
+            installRoute(style)
             installSigns(style)
             installRegionalMarkers(style)
             installPersonalReports(style)

@@ -822,7 +822,8 @@ class LauncherRenderer {
         val pad = maxOf(8f, 14f * k)
         val inner = RectF(r.left + pad, r.top + pad, r.right - pad, r.bottom - pad)
         val lim = sg.limit
-        val over = lim != null && st.gpsFix && st.speedKmh != null && st.speedKmh > lim
+        val over = lim != null && st.gpsFix && st.speedKmh != null &&
+            st.speedKmh > lim + st.settings.speedWarningToleranceKmh
         val fs = maxOf(11f, 15f * k)
         val sub = when {
             over -> "Đang vượt tốc độ"
