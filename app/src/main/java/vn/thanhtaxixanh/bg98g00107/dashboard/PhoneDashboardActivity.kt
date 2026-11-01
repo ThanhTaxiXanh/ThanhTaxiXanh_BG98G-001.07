@@ -184,10 +184,17 @@ class PhoneDashboardActivity : Activity() {
         }
         root.addView(toolbar)
         status = TextView(this).apply {
-            text = "Dashboard cục bộ · không dùng để thao tác khi lái xe"
+            text = "Dashboard cục bộ · chạm để xem hiệu năng bản đồ"
             setTextColor(Color.WHITE)
             textSize = 12f
             setPadding(12, 0, 12, 4)
+            setOnClickListener {
+                AlertDialog.Builder(this@PhoneDashboardActivity)
+                    .setTitle("Hiệu năng bản đồ · Phase 3")
+                    .setMessage(maps.diagnosticSummary())
+                    .setPositiveButton("Đóng", null)
+                    .show()
+            }
         }
         root.addView(status)
         view = DashboardCanvasView()

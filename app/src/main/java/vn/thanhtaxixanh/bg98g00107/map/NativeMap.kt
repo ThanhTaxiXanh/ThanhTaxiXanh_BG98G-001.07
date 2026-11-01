@@ -170,6 +170,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     @Volatile private var captureMinIntervalMs = 33L
     private var lastCapturedFrameMs = Long.MIN_VALUE
     @Volatile private var captureSessionId = 0L
+    @Volatile private var lastPerformanceSummary = "Chưa có mẫu hiệu năng."
 
     // camera / người dùng
     private val cameraController = DrivingCameraController()
@@ -231,7 +232,9 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                     performance.snapshotIfDue(SystemClock.elapsedRealtime())?.let { sample ->
                         val rt = Runtime.getRuntime()
                         val usedBytes = rt.totalMemory() - rt.freeMemory()
-                        Log.d("CarTaxiPerf", sample.logLine(usedBytes))
+                        val line = sample.logLine(usedBytes)
+                        lastPerformanceSummary = line
+                        Log.d("CarTaxiPerf", line)
                     }
                 }
             }
@@ -270,6 +273,22 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
 
     fun recordHostDrawNs(durationNs: Long) {
         if (perfDebug) performance.recordHostDrawNs(durationNs)
+    }
+
+    fun diagnosticSummary(): String {
+        val requested = if (requestedFrameW > 0 && requestedFrameH > 0) {
+            requestedFrameW.toString() + "×" + requestedFrameH
+        } else {
+            "--"
+        }
+        val capture = if (frameW > 0 && frameH > 0) {
+            frameW.toString() + "×" + frameH
+        } else {
+            "--"
+        }
+        return "Requested: " + requested +
+            "\nCapture: " + capture +
+            "\n" + lastPerformanceSummary
     }
 
     /** Explicit phone/car map recenter command; preserves driving camera controls. */
