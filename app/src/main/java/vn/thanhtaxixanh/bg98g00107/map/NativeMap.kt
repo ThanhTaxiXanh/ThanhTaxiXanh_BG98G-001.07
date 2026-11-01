@@ -146,6 +146,8 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     private var offlineRoadRequestId = 0L
     private var regionMarkers: List<vn.thanhtaxixanh.bg98g00107.signs.RegionalOsmStore.Marker> =
         emptyList()
+    private var routeCameraMarkers:
+        List<vn.thanhtaxixanh.bg98g00107.signs.RegionalOsmStore.Marker> = emptyList()
     private var regionKey = Int.MIN_VALUE
     private val reportStore = TrafficReportStore(File(appCtx.filesDir, "traffic_reports_v1.json"))
     private val settingsStore = DashboardSettingsRepository(appCtx)
@@ -1155,7 +1157,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                 headingDegrees = tHeading,
                 moving = moving,
                 accuracyM = lastAccuracyM,
-                markers = regionMarkers,
+                markers = routeCameraMarkers,
                 maxLookaheadM = cameraSettings.cameraFarWarningM
             )
             val mergedWarnings = ArrayList<vn.thanhtaxixanh.bg98g00107.signs.UpcomingSign>()
@@ -1330,10 +1332,27 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                 logErr("NativeMap:regionalOsm", e)
                 emptyList()
             } else emptyList()
+            val cameraRadius = (
+                cameraSettings.cameraFarWarningM + 250
+            ).coerceIn(500, 1_500).toDouble()
+            val cameras = if (hasFix) try {
+                (
+                    regionDb.nearbyCameras(
+                        tLat, tLon, cameraRadius, 200
+                    ) +
+                    nationalBundle.nearbyCameras(
+                        tLat, tLon, cameraRadius, 200
+                    )
+                ).distinctBy { it.osmId }.take(300)
+            } catch (e: Exception) {
+                logErr("NativeMap:cameraOsm", e)
+                emptyList()
+            } else emptyList()
             main.post {
                 reportLayerEnabled = enabled
                 reportSnapshot = records
                 regionMarkers = regional
+                routeCameraMarkers = cameras
                 reportsLoading = false
                 drawPersonalReports(nowMs)
                 drawRegionalMarkers()

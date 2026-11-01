@@ -158,6 +158,55 @@ class RegionalOsmStore(context: Context) :
         }.take(limit)
     }
 
+    fun nearbyCameras(
+        lat: Double,
+        lon: Double,
+        radiusM: Double = 1_500.0,
+        limit: Int = 200
+    ): List<Marker> {
+        require(
+            lat.isFinite() && lon.isFinite() &&
+                lat in -90.0..90.0 && lon in -180.0..180.0 &&
+                radiusM in 50.0..5_000.0 && limit in 1..300
+        )
+        val dlat = radiusM / 111_320.0
+        val dlon = radiusM / (
+            111_320.0 * cos(Math.toRadians(lat)).coerceAtLeast(0.05)
+        )
+        val found = ArrayList<Marker>()
+        readableDatabase.rawQuery(
+            """SELECT id,region,lat,lon,type,label,speed_value,source,osm_id
+               FROM markers
+               WHERE type IN ('camera','redlight_camera')
+                 AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?
+               LIMIT 600""",
+            arrayOf(
+                (lat - dlat).toString(), (lat + dlat).toString(),
+                (lon - dlon).toString(), (lon + dlon).toString()
+            )
+        ).use { c ->
+            while (c.moveToNext()) {
+                val m = Marker(
+                    c.getString(0), c.getString(1), c.getDouble(2),
+                    c.getDouble(3), c.getString(4), c.getString(5),
+                    c.getInt(6), c.getString(7), c.getString(8)
+                )
+                val north = (m.lat - lat) * 111_320.0
+                val east = (m.lon - lon) * 111_320.0 *
+                    cos(Math.toRadians(lat))
+                if (north * north + east * east <= radiusM * radiusM) {
+                    found.add(m)
+                }
+            }
+        }
+        return found.sortedBy {
+            val dy = (it.lat - lat) * 111_320.0
+            val dx = (it.lon - lon) * 111_320.0 *
+                cos(Math.toRadians(lat))
+            dx * dx + dy * dy
+        }.take(limit)
+    }
+
     companion object {
         val allowedTypes = setOf("speed","camera","redlight_camera","stop",
             "yield","no_entry","no_overtaking","no_parking",

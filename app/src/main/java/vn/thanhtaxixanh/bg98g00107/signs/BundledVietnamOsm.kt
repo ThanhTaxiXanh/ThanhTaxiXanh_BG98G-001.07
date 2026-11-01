@@ -127,6 +127,56 @@ internal class BundledVietnamOsm(private val ctx: Context) {
         return out.take(limit)
     }
 
+    @Synchronized fun nearbyCameras(
+        lat: Double,
+        lon: Double,
+        radiusM: Double = 1_500.0,
+        limit: Int = 200
+    ): List<RegionalOsmStore.Marker> {
+        if (!lat.isFinite() || !lon.isFinite() ||
+            lat !in -90.0..90.0 || lon !in -180.0..180.0 ||
+            radiusM !in 50.0..5_000.0 || limit !in 1..300
+        ) return emptyList()
+        val db = open() ?: return emptyList()
+        val dy = radiusM / 111_320.0
+        val dx = radiusM / (
+            111_320.0 * cos(Math.toRadians(lat)).coerceAtLeast(0.05)
+        )
+        val out = ArrayList<RegionalOsmStore.Marker>()
+        db.rawQuery(
+            """SELECT id,region,lat,lon,type,label,speed_value,source,osm_id
+               FROM markers
+               WHERE type IN ('camera','redlight_camera')
+                 AND lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?
+               LIMIT 600""",
+            arrayOf(
+                (lat - dy).toString(), (lat + dy).toString(),
+                (lon - dx).toString(), (lon + dx).toString()
+            )
+        ).use { c ->
+            while (c.moveToNext()) {
+                val north = (c.getDouble(2) - lat) * 111_320.0
+                val east = (c.getDouble(3) - lon) * 111_320.0 *
+                    cos(Math.toRadians(lat))
+                if (north * north + east * east > radiusM * radiusM) continue
+                out.add(
+                    RegionalOsmStore.Marker(
+                        c.getString(0), c.getString(1),
+                        c.getDouble(2), c.getDouble(3),
+                        c.getString(4), c.getString(5),
+                        c.getInt(6), c.getString(7), c.getString(8)
+                    )
+                )
+            }
+        }
+        return out.sortedBy {
+            val north = (it.lat - lat) * 111_320.0
+            val east = (it.lon - lon) * 111_320.0 *
+                cos(Math.toRadians(lat))
+            north * north + east * east
+        }.take(limit)
+    }
+
     /**
      * V3 road context: includes supported motor roads even when maxspeed is
      * absent. R-Tree prefilters a small GPS neighborhood, then SpeedWayMatcher
