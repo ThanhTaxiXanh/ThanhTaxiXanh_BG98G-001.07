@@ -485,7 +485,11 @@ class LauncherRenderer {
 
         val p = Path()
         when (g.maneuver) {
-            ManeuverType.LEFT -> {
+            ManeuverType.LEFT,
+            ManeuverType.SLIGHT_LEFT,
+            ManeuverType.SHARP_LEFT,
+            ManeuverType.KEEP_LEFT,
+            ManeuverType.EXIT_LEFT -> {
                 p.moveTo(cx + iconR * 0.55f, cy + iconR * 0.55f)
                 p.lineTo(cx + iconR * 0.55f, cy - iconR * 0.25f)
                 p.lineTo(cx - iconR * 0.45f, cy - iconR * 0.25f)
@@ -494,7 +498,11 @@ class LauncherRenderer {
                 p.moveTo(cx - iconR * 0.45f, cy - iconR * 0.25f)
                 p.lineTo(cx - iconR * 0.05f, cy + iconR * 0.10f)
             }
-            ManeuverType.RIGHT -> {
+            ManeuverType.RIGHT,
+            ManeuverType.SLIGHT_RIGHT,
+            ManeuverType.SHARP_RIGHT,
+            ManeuverType.KEEP_RIGHT,
+            ManeuverType.EXIT_RIGHT -> {
                 p.moveTo(cx - iconR * 0.55f, cy + iconR * 0.55f)
                 p.lineTo(cx - iconR * 0.55f, cy - iconR * 0.25f)
                 p.lineTo(cx + iconR * 0.45f, cy - iconR * 0.25f)
@@ -510,6 +518,34 @@ class LauncherRenderer {
                 p.lineTo(cx - iconR * 0.72f, cy + iconR * 0.18f)
                 p.moveTo(cx - iconR * 0.46f, cy - iconR * 0.05f)
                 p.lineTo(cx - iconR * 0.18f, cy + iconR * 0.15f)
+            }
+            ManeuverType.ROUNDABOUT -> {
+                p.addArc(
+                    RectF(
+                        cx - iconR * 0.48f,
+                        cy - iconR * 0.48f,
+                        cx + iconR * 0.48f,
+                        cy + iconR * 0.48f
+                    ),
+                    -65f,
+                    285f
+                )
+                p.moveTo(cx + iconR * 0.46f, cy - iconR * 0.12f)
+                p.lineTo(cx + iconR * 0.68f, cy - iconR * 0.38f)
+                p.moveTo(cx + iconR * 0.46f, cy - iconR * 0.12f)
+                p.lineTo(cx + iconR * 0.18f, cy - iconR * 0.30f)
+            }
+            ManeuverType.OFF_ROUTE -> {
+                p.moveTo(cx - iconR * 0.5f, cy - iconR * 0.5f)
+                p.lineTo(cx + iconR * 0.5f, cy + iconR * 0.5f)
+                p.moveTo(cx + iconR * 0.5f, cy - iconR * 0.5f)
+                p.lineTo(cx - iconR * 0.5f, cy + iconR * 0.5f)
+            }
+            ManeuverType.ARRIVE -> {
+                p.moveTo(cx - iconR * 0.35f, cy + iconR * 0.6f)
+                p.lineTo(cx - iconR * 0.35f, cy - iconR * 0.6f)
+                p.lineTo(cx + iconR * 0.45f, cy - iconR * 0.35f)
+                p.lineTo(cx - iconR * 0.35f, cy - iconR * 0.08f)
             }
             else -> {
                 p.moveTo(cx, cy + iconR * 0.62f)

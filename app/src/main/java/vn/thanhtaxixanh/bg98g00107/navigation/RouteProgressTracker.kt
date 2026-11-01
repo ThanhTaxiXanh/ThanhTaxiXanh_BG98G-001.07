@@ -69,15 +69,10 @@ class RouteProgressTracker {
     }
 
     private fun nearestIndex(route: RoutePlan, here: RoutePoint): Int {
-        val start: Int
-        val end: Int
-        if (lastIndex < 0) {
-            start = 0
-            end = route.points.lastIndex
-        } else {
-            start = (lastIndex - 35).coerceAtLeast(0)
-            end = (lastIndex + 260).coerceAtMost(route.points.lastIndex)
-        }
+        if (lastIndex < 0) return coarseNearest(route, here)
+
+        val start = (lastIndex - 35).coerceAtLeast(0)
+        val end = (lastIndex + 260).coerceAtMost(route.points.lastIndex)
         var best = start
         var bestD = Double.POSITIVE_INFINITY
         for (i in start..end) {
@@ -87,15 +82,41 @@ class RouteProgressTracker {
                 best = i
             }
         }
-        if (lastIndex >= 0 && bestD > 140.0) {
-            best = 0
-            bestD = Double.POSITIVE_INFINITY
-            for (i in route.points.indices) {
-                val d = routeDistanceMeters(here, route.points[i])
-                if (d < bestD) {
-                    bestD = d
-                    best = i
-                }
+        return if (bestD > 140.0) coarseNearest(route, here) else best
+    }
+
+    /**
+     * Bounds first-fix/rejoin work to roughly two thousand coarse samples plus
+     * a short fine window, even for a very long BRouter track.
+     */
+    private fun coarseNearest(route: RoutePlan, here: RoutePoint): Int {
+        val points = route.points
+        val stride = (points.size / 2_000).coerceAtLeast(1)
+        var coarse = 0
+        var coarseD = Double.POSITIVE_INFINITY
+        var i = 0
+        while (i < points.size) {
+            val d = routeDistanceMeters(here, points[i])
+            if (d < coarseD) {
+                coarseD = d
+                coarse = i
+            }
+            i += stride
+        }
+        if (coarse != points.lastIndex) {
+            val d = routeDistanceMeters(here, points.last())
+            if (d < coarseD) coarse = points.lastIndex
+        }
+
+        val start = (coarse - stride * 2).coerceAtLeast(0)
+        val end = (coarse + stride * 2).coerceAtMost(points.lastIndex)
+        var best = start
+        var bestD = Double.POSITIVE_INFINITY
+        for (idx in start..end) {
+            val d = routeDistanceMeters(here, points[idx])
+            if (d < bestD) {
+                bestD = d
+                best = idx
             }
         }
         return best
