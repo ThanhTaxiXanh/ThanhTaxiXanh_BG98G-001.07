@@ -73,6 +73,8 @@ dependencies {
     implementation("androidx.car.app:app:1.4.0")
     implementation("com.google.zxing:core:3.5.3")
     implementation("org.maplibre.gl:android-sdk:11.5.2")
+    // On-device YOLOv8 ONNX inference; no third-party streaming service.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.1")
     // Media3 1.4.1 is compatible with this project's compileSdk 34.
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-session:1.4.1")
