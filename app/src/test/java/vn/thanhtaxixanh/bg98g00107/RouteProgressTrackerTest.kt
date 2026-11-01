@@ -29,12 +29,17 @@ class RouteProgressTrackerTest {
         assertNotNull(state.etaMinutes)
     }
 
-    @Test fun largeDeviationFailsClosedAsOffRoute() {
+    @Test fun largeDeviationRequiresStableEvidenceBeforeOffRoute() {
         val t = RouteProgressTracker()
         t.setRoute(route())
-        val state = t.update(21.0020, 106.0005)
-        assertEquals(ManeuverType.OFF_ROUTE, state.maneuver)
-        assertEquals("Đã lệch tuyến", state.instruction)
+        t.update(21.0, 106.00045)
+        val firstBad = t.update(21.0020, 106.0005)
+        assertNotEquals(ManeuverType.OFF_ROUTE, firstBad.maneuver)
+        val secondBad = t.update(21.0020, 106.0005)
+        assertNotEquals(ManeuverType.OFF_ROUTE, secondBad.maneuver)
+        val thirdBad = t.update(21.0020, 106.0005)
+        assertEquals(ManeuverType.OFF_ROUTE, thirdBad.maneuver)
+        assertEquals("Đã lệch tuyến", thirdBad.instruction)
     }
 
     @Test fun afterLastManeuverHeadsToDestination() {
