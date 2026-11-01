@@ -28,17 +28,17 @@ internal data class AiObservation(
         lat != null && lon != null &&
         lat.isFinite() && lon.isFinite() &&
         lat in -90.0..90.0 && lon in -180.0..180.0 &&
-        (proposedSpeedKph == null || proposedSpeedKph in AiObservationRules.SPEEDS)
+        (proposedSpeedKph == null || (proposedSpeedKph?.let { it in AiObservationRules.SPEEDS } == true))
 
     fun appliesToRoadSegment(): Boolean =
         reviewStatus == AiReviewStatus.APPROVED_LOCAL &&
         roadWayId != null && roadWayId > 0 &&
-        proposedSpeedKph in AiObservationRules.SPEEDS &&
+        (proposedSpeedKph?.let { it in AiObservationRules.SPEEDS } == true) &&
         kind != AiEvidenceKind.ROAD_CLASS_SUGGESTION
 
     fun isSpeedPoint(): Boolean =
         reviewStatus == AiReviewStatus.APPROVED_LOCAL &&
-        proposedSpeedKph in AiObservationRules.SPEEDS &&
+        (proposedSpeedKph?.let { it in AiObservationRules.SPEEDS } == true) &&
         kind != AiEvidenceKind.ROAD_CLASS_SUGGESTION
 }
 

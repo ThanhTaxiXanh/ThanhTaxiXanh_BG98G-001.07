@@ -65,7 +65,9 @@ internal class AiReviewStore(context: Context) {
                 .put("kind", item.kind.name)
                 .put("confidence", item.confidence.toDouble())
                 .put("confirmed_by_user", true)
-            item.proposedSpeedKph?.let { properties.put("speed_kph_user_reviewed", it) }
+            if (item.isSpeedPoint()) item.proposedSpeedKph?.let {
+                properties.put("speed_kph_user_reviewed", it)
+            }
             item.roadWayId?.let { properties.put("osm_way_id", it) }
             features.put(JSONObject()
                 .put("type", "Feature")
@@ -112,7 +114,7 @@ internal class AiReviewStore(context: Context) {
         lat = if (obj.has("lat")) obj.getDouble("lat") else null,
         lon = if (obj.has("lon")) obj.getDouble("lon") else null,
         roadWayId = if (obj.has("way")) obj.getLong("way") else null,
-        evidenceFile = obj.optString("file", "").ifBlank { null },
+        evidenceFile = obj.optString("file", "").takeIf { it.isNotBlank() },
         source = obj.optString("source", "70mai_import"),
         reviewStatus = AiReviewStatus.valueOf(obj.optString("status", "PENDING"))
     )
