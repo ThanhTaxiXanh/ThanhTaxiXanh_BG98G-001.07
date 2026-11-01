@@ -491,7 +491,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                     }
                 }
 
-                val target = bitmap
+                val target = requireNotNull(bitmap)
                 val buf = plane.buffer
                 buf.rewind()
                 target.copyPixelsFromBuffer(buf)
