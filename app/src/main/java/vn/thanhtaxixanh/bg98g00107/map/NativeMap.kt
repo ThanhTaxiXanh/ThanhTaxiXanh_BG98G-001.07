@@ -39,6 +39,7 @@ import android.media.Image
 import android.media.ImageReader
 import android.os.Bundle
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.SystemClock
 import android.content.pm.ApplicationInfo
 import android.util.Log
@@ -77,6 +78,7 @@ import org.maplibre.geojson.MultiLineString
 import org.maplibre.geojson.Point
 import java.io.File
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.Calendar
 import kotlin.math.abs
 import kotlin.math.asin
@@ -102,7 +104,6 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     }
 
     var status = "Đang chờ"
-    var frame: Bitmap? = null
     var frameW = 0
     var frameH = 0
     var streetName = ""
@@ -146,7 +147,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     private var routeStamp = Long.MIN_VALUE
 
     private var vd: VirtualDisplay? = null
-    private var reader: ImageReader? = null
+    @Volatile private var reader: ImageReader? = null
     private var pres: MapPresentation? = null
     private var map: MapLibreMap? = null
     private var arrow: ArrowView? = null
@@ -155,6 +156,15 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     private val startRetry = MapStartRetry()
     private val perfDebug = (appCtx.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
     private val performance = MapPerformanceMonitor()
+    private val frameLock = Any()
+    private val captureLock = Any()
+    private var publishedFrame: Bitmap? = null
+    private var backFrame: Bitmap? = null
+    private var captureThread: HandlerThread? = null
+    private var captureHandler: Handler? = null
+    private val frameNotifyPending = AtomicBoolean(false)
+    @Volatile private var captureMinIntervalMs = 33L
+    private var lastCapturedFrameMs = Long.MIN_VALUE
 
     // camera / người dùng
     private val cameraController = DrivingCameraController()
@@ -221,18 +231,24 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                 }
             }
             val now = SystemClock.elapsedRealtime()
-            main.postDelayed(
-                this,
-                MapFrameRatePolicy.delayMs(
-                    hasFix = hasFix,
-                    moving = moving,
-                    interactive = now < interactionBoostUntilMs
-                )
+            val delayMs = MapFrameRatePolicy.delayMs(
+                hasFix = hasFix,
+                moving = moving,
+                interactive = now < interactionBoostUntilMs
             )
+            captureMinIntervalMs = delayMs
+            main.postDelayed(this, delayMs)
         }
     }
 
     fun running(): Boolean = vd != null
+
+    /**
+     * Holds the published frame stable for one render pass. Capture writes only
+     * to the back buffer and cannot recycle/reuse this bitmap until the block exits.
+     */
+    fun <T> withFrame(block: (Bitmap?) -> T): T =
+        synchronized(frameLock) { block(publishedFrame) }
 
     /** Explicit phone/car map recenter command; preserves driving camera controls. */
     fun recenterMap() { recenter() }
@@ -275,13 +291,17 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         try {
             update(System.currentTimeMillis())
             MapLibre.getInstance(appCtx)
+            val capture = ensureCaptureHandler()
             val r = ImageReader.newInstance(vw, vh, PixelFormat.RGBA_8888, 2)
-            r.setOnImageAvailableListener({ rd -> onImage(rd) }, main)
+            reader = r
+            r.setOnImageAvailableListener({ rd -> onImage(rd) }, capture)
             val dm = appCtx.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
             val flags = DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION
             val d = dm.createVirtualDisplay("CarTaxiMap", vw, vh, DPI, r.surface, flags)
             if (d == null) {
+                reader = null
+                r.setOnImageAvailableListener(null, null)
                 r.close()
                 status = "Không tạo được màn hình ảo"
                 startRetry.recordFailure(SystemClock.elapsedRealtime())
@@ -361,13 +381,26 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             logErr("NativeMap:224", t)
         }
         vd = null
-        try {
-            reader?.close()
-        } catch (t: Throwable) {
-            logErr("NativeMap:229", t)
+        synchronized(captureLock) {
+            val oldReader = reader
+            reader = null
+            try {
+                oldReader?.setOnImageAvailableListener(null, null)
+                oldReader?.close()
+            } catch (t: Throwable) {
+                logErr("NativeMap:229", t)
+            }
+            synchronized(frameLock) {
+                val a = publishedFrame
+                val b = backFrame
+                publishedFrame = null
+                backFrame = null
+                if (a != null && !a.isRecycled) a.recycle()
+                if (b != null && b !== a && !b.isRecycled) b.recycle()
+            }
         }
-        reader = null
-        frame = null
+        frameNotifyPending.set(false)
+        lastCapturedFrameMs = Long.MIN_VALUE
         lastFrameMs = 0L
         interactionBoostUntilMs = 0L
         segs.clear()
@@ -399,40 +432,104 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         regionDb.close()
         nationalBundle.close()
         signs.close()
+        captureHandler = null
+        captureThread?.quitSafely()
+        captureThread = null
     }
 
     // ---------- khung hình ----------
 
+    private fun ensureCaptureHandler(): Handler {
+        captureHandler?.let { return it }
+        val thread = HandlerThread("TTX-MapCapture").apply { start() }
+        captureThread = thread
+        return Handler(thread.looper).also { captureHandler = it }
+    }
+
     private fun onImage(rd: ImageReader) {
-        val img: Image? = try {
-            rd.acquireLatestImage()
-        } catch (e: Exception) {
-            null
-        }
-        if (img == null) return
-        val beginNs = if (perfDebug) SystemClock.elapsedRealtimeNanos() else 0L
-        var copied = false
-        try {
-            val p = img.planes[0]
-            val rw = p.rowStride / p.pixelStride
-            var b = frame
-            if (b == null || b.width != rw || b.height != img.height) {
-                b = Bitmap.createBitmap(rw, img.height, Bitmap.Config.ARGB_8888)
-                frame = b
+        synchronized(captureLock) {
+            if (rd !== reader) return
+
+            val img: Image = try {
+                rd.acquireLatestImage()
+            } catch (_: Exception) {
+                null
+            } ?: return
+
+            val nowMs = SystemClock.elapsedRealtime()
+            if (lastCapturedFrameMs != Long.MIN_VALUE &&
+                nowMs - lastCapturedFrameMs < captureMinIntervalMs) {
+                img.close()
+                if (perfDebug) performance.recordDroppedFrame(nowMs)
+                return
             }
-            val buf = p.buffer
-            buf.rewind()
-            b!!.copyPixelsFromBuffer(buf)
-            copied = true
-        } catch (e: Exception) {
-            status = "Lỗi khung hình: " + e.message
-        } finally {
-            img.close()
+            lastCapturedFrameMs = nowMs
+
+            val beginNs = if (perfDebug) {
+                SystemClock.elapsedRealtimeNanos()
+            } else {
+                0L
+            }
+            var copied = false
+            var target: Bitmap? = null
+            try {
+                val plane = img.planes[0]
+                val rw = plane.rowStride / plane.pixelStride
+                target = synchronized(frameLock) {
+                    val candidate = backFrame
+                    if (candidate == null ||
+                        candidate.width != rw ||
+                        candidate.height != img.height ||
+                        candidate.isRecycled) {
+                        Bitmap.createBitmap(
+                            rw,
+                            img.height,
+                            Bitmap.Config.ARGB_8888
+                        )
+                    } else {
+                        candidate
+                    }
+                }
+
+                val buf = plane.buffer
+                buf.rewind()
+                target.copyPixelsFromBuffer(buf)
+
+                synchronized(frameLock) {
+                    if (rd !== reader) {
+                        if (!target.isRecycled) target.recycle()
+                        target = null
+                        return@synchronized
+                    }
+                    val previous = publishedFrame
+                    publishedFrame = target
+                    backFrame = previous
+                    target = null
+                    copied = true
+                }
+            } catch (e: Exception) {
+                status = "Lỗi khung hình: " + e.message
+            } finally {
+                img.close()
+                target?.let {
+                    if (!it.isRecycled) it.recycle()
+                }
+            }
+
+            if (copied && perfDebug) {
+                performance.recordFrame(
+                    SystemClock.elapsedRealtime(),
+                    SystemClock.elapsedRealtimeNanos() - beginNs
+                )
+            }
         }
-        if (copied && perfDebug) {
-            performance.recordFrame(SystemClock.elapsedRealtime(), SystemClock.elapsedRealtimeNanos() - beginNs)
+
+        if (frameNotifyPending.compareAndSet(false, true)) {
+            main.post {
+                frameNotifyPending.set(false)
+                if (reader != null) onFrame?.invoke()
+            }
         }
-        onFrame?.invoke()
     }
 
     // ---------- cảm ứng từ Android Auto ----------

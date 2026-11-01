@@ -15,6 +15,7 @@ class MapPerformanceMonitorTest {
         m.reset(100L)
         m.recordFrame(200L, 2_000_000L)
         m.recordFrame(400L, 4_000_000L)
+        m.recordDroppedFrame(450L)
         m.recordGpsNs(6_000_000L)
         m.recordGpsNs(2_000_000L)
         m.recordStepNs(1_000_000L)
@@ -24,6 +25,7 @@ class MapPerformanceMonitorTest {
         assertEquals(2.0, s.observedFrameFps, 0.001)
         assertEquals(3.0, s.avgCopyMs!!, 0.001)
         assertEquals(4.0, s.maxCopyMs!!, 0.001)
+        assertEquals(1, s.droppedFrames)
         assertEquals(2, s.gpsUpdates)
         assertEquals(4.0, s.avgGpsMs!!, 0.001)
         assertEquals(6.0, s.maxGpsMs!!, 0.001)
@@ -69,6 +71,7 @@ class MapPerformanceMonitorTest {
         val line = s.logLine(1_048_576L)
         assertTrue(line.contains("java_heap_mb=1.0"))
         assertTrue(line.contains("delivered_frame_fps="))
+        assertTrue(line.contains("dropped_frames=0"))
         assertFalse(line.contains("latitude"))
         assertFalse(line.contains("longitude"))
     }

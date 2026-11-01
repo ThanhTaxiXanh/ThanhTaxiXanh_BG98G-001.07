@@ -468,32 +468,42 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
         }
         try {
             val gpsReady = gpsState() == CarGpsState.READY
-            val st = UiState(
-                speedKmh = speedKmh.takeIf { gpsReady },
-                gpsFix = gpsReady,
-                satellites = maps.satUsed,
-                batteryPct = cachedBatteryPct,
-                qrFile = qrFile,
-                nowMs = System.currentTimeMillis(),
-                selectedIcon = selected,
-                events = evLines,
-                mapFrame = maps.frame,
-                mapFrameW = maps.frameW,
-                mapFrameH = maps.frameH,
-                mapsStatus = maps.status,
-                streetName = maps.streetName.takeIf { gpsReady } ?: "",
-                signs = if (gpsReady) maps.signsState else SignsState.EMPTY,
-                settings = currentSettings,
-                guidance = maps.guidanceState
-            )
-            if (isDebuggable) {
-                // Personal/debug Android Auto mode: always keep the full dashboard
-                // (map + driver data + right-side utility rows) on one surface.
-                renderer.render(canvas, surfaceState.width,
-                    surfaceState.height, st)
-            } else {
-                renderer.renderNavigationSurface(canvas, surfaceState.width,
-                    surfaceState.height, st)
+            maps.withFrame { mapFrame ->
+                val st = UiState(
+                    speedKmh = speedKmh.takeIf { gpsReady },
+                    gpsFix = gpsReady,
+                    satellites = maps.satUsed,
+                    batteryPct = cachedBatteryPct,
+                    qrFile = qrFile,
+                    nowMs = System.currentTimeMillis(),
+                    selectedIcon = selected,
+                    events = evLines,
+                    mapFrame = mapFrame,
+                    mapFrameW = maps.frameW,
+                    mapFrameH = maps.frameH,
+                    mapsStatus = maps.status,
+                    streetName = maps.streetName.takeIf { gpsReady } ?: "",
+                    signs = if (gpsReady) maps.signsState else SignsState.EMPTY,
+                    settings = currentSettings,
+                    guidance = maps.guidanceState
+                )
+                if (isDebuggable) {
+                    // Personal/debug Android Auto mode: always keep the full dashboard
+                    // (map + driver data + right-side utility rows) on one surface.
+                    renderer.render(
+                        canvas,
+                        surfaceState.width,
+                        surfaceState.height,
+                        st
+                    )
+                } else {
+                    renderer.renderNavigationSurface(
+                        canvas,
+                        surfaceState.width,
+                        surfaceState.height,
+                        st
+                    )
+                }
             }
         } catch (e: Exception) {
             logErr("CarService:draw", e)

@@ -17,6 +17,7 @@ internal class MapPerformanceMonitor(private val sampleWindowMs: Long = 10_000L)
     private var frames = 0
     private var frameCopyTotalNs = 0L
     private var frameCopyMaxNs = 0L
+    private var droppedFrames = 0
     private var gpsUpdates = 0
     private var gpsTotalNs = 0L
     private var gpsMaxNs = 0L
@@ -30,6 +31,7 @@ internal class MapPerformanceMonitor(private val sampleWindowMs: Long = 10_000L)
         frames = 0
         frameCopyTotalNs = 0L
         frameCopyMaxNs = 0L
+        droppedFrames = 0
         gpsUpdates = 0
         gpsTotalNs = 0L
         gpsMaxNs = 0L
@@ -56,6 +58,11 @@ internal class MapPerformanceMonitor(private val sampleWindowMs: Long = 10_000L)
         frames++
         frameCopyTotalNs += copyNs
         frameCopyMaxNs = maxOf(frameCopyMaxNs, copyNs)
+    }
+
+    @Synchronized fun recordDroppedFrame(nowMs: Long) {
+        if (windowStartMs < 0L) windowStartMs = nowMs
+        droppedFrames++
     }
 
     @Synchronized fun recordGpsNs(durationNs: Long) {
@@ -86,6 +93,7 @@ internal class MapPerformanceMonitor(private val sampleWindowMs: Long = 10_000L)
             observedFrameFps = frames * 1_000.0 / elapsed,
             avgCopyMs = if (frames == 0) null else frameCopyTotalNs / 1_000_000.0 / frames,
             maxCopyMs = if (frames == 0) null else frameCopyMaxNs / 1_000_000.0,
+            droppedFrames = droppedFrames,
             gpsUpdates = gpsUpdates,
             avgGpsMs = if (gpsUpdates == 0) null else gpsTotalNs / 1_000_000.0 / gpsUpdates,
             maxGpsMs = if (gpsUpdates == 0) null else gpsMaxNs / 1_000_000.0,
@@ -107,6 +115,7 @@ internal data class MapPerfSnapshot(
     val observedFrameFps: Double,
     val avgCopyMs: Double?,
     val maxCopyMs: Double?,
+    val droppedFrames: Int,
     val gpsUpdates: Int,
     val avgGpsMs: Double?,
     val maxGpsMs: Double?,
@@ -117,8 +126,8 @@ internal data class MapPerfSnapshot(
     /** No GPS coordinates, location history, trip IDs or personally identifying data. */
     fun logLine(heapUsedBytes: Long): String = String.format(
         Locale.US,
-        "window_ms=%d delivered_frame_fps=%.1f frames=%d copy_avg_ms=%s copy_max_ms=%s gps_updates=%d gps_avg_ms=%s gps_max_ms=%s map_steps=%d step_avg_ms=%s step_max_ms=%s java_heap_mb=%.1f",
-        durationMs, observedFrameFps, deliveredFrames,
+        "window_ms=%d delivered_frame_fps=%.1f frames=%d dropped_frames=%d copy_avg_ms=%s copy_max_ms=%s gps_updates=%d gps_avg_ms=%s gps_max_ms=%s map_steps=%d step_avg_ms=%s step_max_ms=%s java_heap_mb=%.1f",
+        durationMs, observedFrameFps, deliveredFrames, droppedFrames,
         avgCopyMs?.let { String.format(Locale.US, "%.2f", it) } ?: "-",
         maxCopyMs?.let { String.format(Locale.US, "%.2f", it) } ?: "-",
         gpsUpdates,

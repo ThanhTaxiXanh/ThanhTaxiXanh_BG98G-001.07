@@ -486,24 +486,26 @@ class PhoneDashboardActivity : Activity() {
             super.onDraw(canvas)
             if (width <= 0 || height <= 0) return
             val gpsGood = hasFreshGps()
-            renderer.render(canvas, width, height, UiState(
-                speedKmh = speedKmh.takeIf { gpsGood },
-                gpsFix = gpsGood,
-                satellites = if (gpsGood) maps.satUsed else 0,
-                batteryPct = batteryPct,
-                qrFile = qrFile,
-                nowMs = System.currentTimeMillis(),
-                selectedIcon = activeIcon,
-                events = eventLines,
-                mapFrame = maps.frame,
-                mapFrameW = maps.frameW,
-                mapFrameH = maps.frameH,
-                mapsStatus = maps.status,
-                streetName = maps.streetName.takeIf { gpsGood }.orEmpty(),
-                signs = if (gpsGood) maps.signsState else SignsState.EMPTY,
-                settings = settings,
-                guidance = maps.guidanceState
-            ))
+            maps.withFrame { mapFrame ->
+                renderer.render(canvas, width, height, UiState(
+                    speedKmh = speedKmh.takeIf { gpsGood },
+                    gpsFix = gpsGood,
+                    satellites = if (gpsGood) maps.satUsed else 0,
+                    batteryPct = batteryPct,
+                    qrFile = qrFile,
+                    nowMs = System.currentTimeMillis(),
+                    selectedIcon = activeIcon,
+                    events = eventLines,
+                    mapFrame = mapFrame,
+                    mapFrameW = maps.frameW,
+                    mapFrameH = maps.frameH,
+                    mapsStatus = maps.status,
+                    streetName = maps.streetName.takeIf { gpsGood }.orEmpty(),
+                    signs = if (gpsGood) maps.signsState else SignsState.EMPTY,
+                    settings = settings,
+                    guidance = maps.guidanceState
+                ))
+            }
         }
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
