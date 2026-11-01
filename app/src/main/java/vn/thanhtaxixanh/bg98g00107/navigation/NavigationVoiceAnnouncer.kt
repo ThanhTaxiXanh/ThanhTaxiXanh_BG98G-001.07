@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.os.SystemClock
 import android.speech.tts.TextToSpeech
+import vn.thanhtaxixanh.bg98g00107.signs.SignsState
 import java.util.Locale
 
 class NavigationVoiceAnnouncer(context: Context) : TextToSpeech.OnInitListener {
@@ -13,6 +14,10 @@ class NavigationVoiceAnnouncer(context: Context) : TextToSpeech.OnInitListener {
     private var pendingText: String? = null
     private var lastToken: String? = null
     private var lastOffRouteMs = Long.MIN_VALUE
+    private var lastTrafficLimit: Int? = null
+    private var overspeedActive = false
+    private var lastOverspeedMs = Long.MIN_VALUE
+    private val spokenCameraTokens = LinkedHashSet<String>()
 
     override fun onInit(status: Int) {
         val engine = tts ?: return
@@ -53,6 +58,62 @@ class NavigationVoiceAnnouncer(context: Context) : TextToSpeech.OnInitListener {
         if (ready) speak(prompt.text) else pendingText = prompt.text
     }
 
+    fun onTraffic(
+        state: SignsState,
+        speedKmh: Int,
+        toleranceKmh: Int,
+        speedWarnings: Boolean,
+        cameraWarnings: Boolean,
+        announceLimitChanges: Boolean,
+        nowMs: Long = SystemClock.uptimeMillis()
+    ) {
+        if (speedWarnings) {
+            if (announceLimitChanges) {
+                TrafficVoicePromptPolicy.limitChanged(
+                    state,
+                    lastTrafficLimit
+                )?.let { speak(it.text, TextToSpeech.QUEUE_ADD) }
+            }
+
+            val limit = state.limit
+            if (!state.estimated) lastTrafficLimit = limit
+
+            val over = TrafficVoicePromptPolicy.overspeed(
+                state,
+                speedKmh,
+                toleranceKmh
+            )
+            if (over != null) {
+                if (!overspeedActive ||
+                    lastOverspeedMs == Long.MIN_VALUE ||
+                    nowMs - lastOverspeedMs >= 45_000L
+                ) {
+                    speak(over.text, TextToSpeech.QUEUE_ADD)
+                    lastOverspeedMs = nowMs
+                }
+                overspeedActive = true
+            } else {
+                val resetAt = (state.limit ?: Int.MAX_VALUE) +
+                    toleranceKmh.coerceIn(0, 20) - 2
+                if (speedKmh <= resetAt) overspeedActive = false
+            }
+        } else {
+            overspeedActive = false
+        }
+
+        if (cameraWarnings) {
+            TrafficVoicePromptPolicy.camera(state)?.let { prompt ->
+                if (spokenCameraTokens.add(prompt.token)) {
+                    speak(prompt.text, TextToSpeech.QUEUE_ADD)
+                    while (spokenCameraTokens.size > 80) {
+                        val first = spokenCameraTokens.firstOrNull() ?: break
+                        spokenCameraTokens.remove(first)
+                    }
+                }
+            }
+        }
+    }
+
     fun resetForNewRoute() {
         lastToken = null
         lastOffRouteMs = Long.MIN_VALUE
@@ -71,7 +132,15 @@ class NavigationVoiceAnnouncer(context: Context) : TextToSpeech.OnInitListener {
         tts = null
     }
 
-    private fun speak(text: String) {
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "ttx-nav-guidance")
+    private fun speak(
+        text: String,
+        queueMode: Int = TextToSpeech.QUEUE_FLUSH
+    ) {
+        tts?.speak(
+            text,
+            queueMode,
+            null,
+            "ttx-guidance-" + SystemClock.uptimeMillis()
+        )
     }
 }

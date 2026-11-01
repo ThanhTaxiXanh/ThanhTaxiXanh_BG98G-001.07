@@ -299,6 +299,40 @@ class MainActivity : Activity() {
             textSize = 13f
             setTextColor(android.graphics.Color.rgb(80, 90, 105))
         })
+        val warningSettings = runCatching { settingsRepository.read() }
+            .getOrDefault(DashboardSettings())
+        fun warningToggle(
+            label: String,
+            selected: Boolean,
+            update: (DashboardSettings, Boolean) -> DashboardSettings
+        ) {
+            val box = CheckBox(this).apply {
+                text = label
+                isChecked = selected
+            }
+            box.setOnCheckedChangeListener { _, checked ->
+                runCatching {
+                    settingsRepository.change { latest ->
+                        update(latest, checked)
+                    }
+                }.onFailure {
+                    logErr("MainActivity:warningToggle", it)
+                }
+            }
+            traffic.body.addView(box)
+        }
+        warningToggle(
+            "Âm cảnh báo giới hạn / vượt tốc",
+            warningSettings.voiceSpeedWarnings
+        ) { v, checked -> v.copy(voiceSpeedWarnings = checked) }
+        warningToggle(
+            "Đọc giới hạn tốc độ khi thay đổi",
+            warningSettings.announceSpeedLimitChanges
+        ) { v, checked -> v.copy(announceSpeedLimitChanges = checked) }
+        warningToggle(
+            "Âm cảnh báo Speedcam / camera đèn đỏ",
+            warningSettings.voiceCameraWarnings
+        ) { v, checked -> v.copy(voiceCameraWarnings = checked) }
         reportBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }

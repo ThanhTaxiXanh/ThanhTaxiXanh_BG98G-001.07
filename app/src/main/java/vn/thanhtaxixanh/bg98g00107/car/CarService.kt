@@ -205,10 +205,20 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
                 currentSettings.recordTrips,
                 maps.streetName
             )
+            val now = SystemClock.uptimeMillis()
             voiceAnnouncer.onGuidance(
                 maps.guidanceState,
                 speedKmh ?: 0,
-                SystemClock.uptimeMillis()
+                now
+            )
+            voiceAnnouncer.onTraffic(
+                maps.signsState,
+                speedKmh ?: 0,
+                currentSettings.speedWarningToleranceKmh,
+                currentSettings.voiceSpeedWarnings,
+                currentSettings.voiceCameraWarnings,
+                currentSettings.announceSpeedLimitChanges,
+                now
             )
             maybeReroute(location)
         }
