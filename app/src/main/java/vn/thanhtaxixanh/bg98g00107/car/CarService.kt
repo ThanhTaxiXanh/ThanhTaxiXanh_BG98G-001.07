@@ -457,6 +457,11 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
 
     private fun draw() {
         if (!surfaceState.canRun()) return
+        val drawBeginNs = if (isDebuggable) {
+            SystemClock.elapsedRealtimeNanos()
+        } else {
+            0L
+        }
         val s = surface ?: return
         if (!s.isValid) return
         lastDraw = SystemClock.uptimeMillis()
@@ -508,8 +513,15 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
         } catch (e: Exception) {
             logErr("CarService:draw", e)
         } finally {
-            try { s.unlockCanvasAndPost(canvas) } catch (e: Exception) {
+            try {
+                s.unlockCanvasAndPost(canvas)
+            } catch (e: Exception) {
                 logErr("CarService:unlockCanvas", e)
+            }
+            if (isDebuggable) {
+                maps.recordHostDrawNs(
+                    SystemClock.elapsedRealtimeNanos() - drawBeginNs
+                )
             }
         }
     }

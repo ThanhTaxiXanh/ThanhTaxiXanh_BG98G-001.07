@@ -18,6 +18,12 @@ internal class MapPerformanceMonitor(private val sampleWindowMs: Long = 10_000L)
     private var frameCopyTotalNs = 0L
     private var frameCopyMaxNs = 0L
     private var droppedFrames = 0
+    private var frameLockWaits = 0
+    private var frameLockWaitTotalNs = 0L
+    private var frameLockWaitMaxNs = 0L
+    private var hostDraws = 0
+    private var hostDrawTotalNs = 0L
+    private var hostDrawMaxNs = 0L
     private var gpsUpdates = 0
     private var gpsTotalNs = 0L
     private var gpsMaxNs = 0L
@@ -32,6 +38,12 @@ internal class MapPerformanceMonitor(private val sampleWindowMs: Long = 10_000L)
         frameCopyTotalNs = 0L
         frameCopyMaxNs = 0L
         droppedFrames = 0
+        frameLockWaits = 0
+        frameLockWaitTotalNs = 0L
+        frameLockWaitMaxNs = 0L
+        hostDraws = 0
+        hostDrawTotalNs = 0L
+        hostDrawMaxNs = 0L
         gpsUpdates = 0
         gpsTotalNs = 0L
         gpsMaxNs = 0L
@@ -65,6 +77,20 @@ internal class MapPerformanceMonitor(private val sampleWindowMs: Long = 10_000L)
         droppedFrames++
     }
 
+    @Synchronized fun recordFrameLockWaitNs(durationNs: Long) {
+        if (durationNs < 0L) return
+        frameLockWaits++
+        frameLockWaitTotalNs += durationNs
+        frameLockWaitMaxNs = maxOf(frameLockWaitMaxNs, durationNs)
+    }
+
+    @Synchronized fun recordHostDrawNs(durationNs: Long) {
+        if (durationNs < 0L) return
+        hostDraws++
+        hostDrawTotalNs += durationNs
+        hostDrawMaxNs = maxOf(hostDrawMaxNs, durationNs)
+    }
+
     @Synchronized fun recordGpsNs(durationNs: Long) {
         if (durationNs < 0L) return
         gpsUpdates++
@@ -94,6 +120,16 @@ internal class MapPerformanceMonitor(private val sampleWindowMs: Long = 10_000L)
             avgCopyMs = if (frames == 0) null else frameCopyTotalNs / 1_000_000.0 / frames,
             maxCopyMs = if (frames == 0) null else frameCopyMaxNs / 1_000_000.0,
             droppedFrames = droppedFrames,
+            frameLockWaits = frameLockWaits,
+            avgFrameLockWaitMs = if (frameLockWaits == 0) null
+                else frameLockWaitTotalNs / 1_000_000.0 / frameLockWaits,
+            maxFrameLockWaitMs = if (frameLockWaits == 0) null
+                else frameLockWaitMaxNs / 1_000_000.0,
+            hostDraws = hostDraws,
+            avgHostDrawMs = if (hostDraws == 0) null
+                else hostDrawTotalNs / 1_000_000.0 / hostDraws,
+            maxHostDrawMs = if (hostDraws == 0) null
+                else hostDrawMaxNs / 1_000_000.0,
             gpsUpdates = gpsUpdates,
             avgGpsMs = if (gpsUpdates == 0) null else gpsTotalNs / 1_000_000.0 / gpsUpdates,
             maxGpsMs = if (gpsUpdates == 0) null else gpsMaxNs / 1_000_000.0,
@@ -116,6 +152,12 @@ internal data class MapPerfSnapshot(
     val avgCopyMs: Double?,
     val maxCopyMs: Double?,
     val droppedFrames: Int,
+    val frameLockWaits: Int,
+    val avgFrameLockWaitMs: Double?,
+    val maxFrameLockWaitMs: Double?,
+    val hostDraws: Int,
+    val avgHostDrawMs: Double?,
+    val maxHostDrawMs: Double?,
     val gpsUpdates: Int,
     val avgGpsMs: Double?,
     val maxGpsMs: Double?,
@@ -126,10 +168,14 @@ internal data class MapPerfSnapshot(
     /** No GPS coordinates, location history, trip IDs or personally identifying data. */
     fun logLine(heapUsedBytes: Long): String = String.format(
         Locale.US,
-        "window_ms=%d delivered_frame_fps=%.1f frames=%d dropped_frames=%d copy_avg_ms=%s copy_max_ms=%s gps_updates=%d gps_avg_ms=%s gps_max_ms=%s map_steps=%d step_avg_ms=%s step_max_ms=%s java_heap_mb=%.1f",
+        "window_ms=%d delivered_frame_fps=%.1f frames=%d dropped_frames=%d copy_avg_ms=%s copy_max_ms=%s frame_lock_wait_avg_ms=%s frame_lock_wait_max_ms=%s host_draw_avg_ms=%s host_draw_max_ms=%s gps_updates=%d gps_avg_ms=%s gps_max_ms=%s map_steps=%d step_avg_ms=%s step_max_ms=%s java_heap_mb=%.1f",
         durationMs, observedFrameFps, deliveredFrames, droppedFrames,
         avgCopyMs?.let { String.format(Locale.US, "%.2f", it) } ?: "-",
         maxCopyMs?.let { String.format(Locale.US, "%.2f", it) } ?: "-",
+        avgFrameLockWaitMs?.let { String.format(Locale.US, "%.2f", it) } ?: "-",
+        maxFrameLockWaitMs?.let { String.format(Locale.US, "%.2f", it) } ?: "-",
+        avgHostDrawMs?.let { String.format(Locale.US, "%.2f", it) } ?: "-",
+        maxHostDrawMs?.let { String.format(Locale.US, "%.2f", it) } ?: "-",
         gpsUpdates,
         avgGpsMs?.let { String.format(Locale.US, "%.2f", it) } ?: "-",
         maxGpsMs?.let { String.format(Locale.US, "%.2f", it) } ?: "-",

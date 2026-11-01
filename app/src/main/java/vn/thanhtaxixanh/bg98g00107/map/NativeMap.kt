@@ -165,6 +165,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     private val frameNotifyPending = AtomicBoolean(false)
     @Volatile private var captureMinIntervalMs = 33L
     private var lastCapturedFrameMs = Long.MIN_VALUE
+    @Volatile private var captureSessionId = 0L
 
     // camera / người dùng
     private val cameraController = DrivingCameraController()
@@ -247,8 +248,21 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
      * Holds the published frame stable for one render pass. Capture writes only
      * to the back buffer and cannot recycle/reuse this bitmap until the block exits.
      */
-    fun <T> withFrame(block: (Bitmap?) -> T): T =
-        synchronized(frameLock) { block(publishedFrame) }
+    fun <T> withFrame(block: (Bitmap?) -> T): T {
+        val waitStartNs = if (perfDebug) SystemClock.elapsedRealtimeNanos() else 0L
+        synchronized(frameLock) {
+            if (perfDebug) {
+                performance.recordFrameLockWaitNs(
+                    SystemClock.elapsedRealtimeNanos() - waitStartNs
+                )
+            }
+            return block(publishedFrame)
+        }
+    }
+
+    fun recordHostDrawNs(durationNs: Long) {
+        if (perfDebug) performance.recordHostDrawNs(durationNs)
+    }
 
     /** Explicit phone/car map recenter command; preserves driving camera controls. */
     fun recenterMap() { recenter() }
@@ -293,6 +307,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             update(System.currentTimeMillis())
             MapLibre.getInstance(appCtx)
             val capture = ensureCaptureHandler()
+            captureSessionId++
             val r = ImageReader.newInstance(vw, vh, PixelFormat.RGBA_8888, 2)
             reader = r
             r.setOnImageAvailableListener({ rd -> onImage(rd) }, capture)
@@ -390,6 +405,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         }
         vd = null
         synchronized(captureLock) {
+            captureSessionId++
             val oldReader = reader
             reader = null
             try {
@@ -455,8 +471,9 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     }
 
     private fun onImage(rd: ImageReader) {
+        val sessionId = captureSessionId
         synchronized(captureLock) {
-            if (rd !== reader) return
+            if (rd !== reader || sessionId != captureSessionId) return
 
             val img: Image = try {
                 rd.acquireLatestImage()
@@ -527,7 +544,9 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         if (frameNotifyPending.compareAndSet(false, true)) {
             main.post {
                 frameNotifyPending.set(false)
-                if (reader != null) onFrame?.invoke()
+                if (sessionId == captureSessionId && rd === reader) {
+                    onFrame?.invoke()
+                }
             }
         }
     }
