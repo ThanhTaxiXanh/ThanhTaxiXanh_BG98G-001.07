@@ -54,6 +54,7 @@ import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
@@ -164,13 +165,14 @@ class MainActivity : Activity() {
 
         val overview = module("overview", "Tổng quan")
         val dashboard = module("dashboard", "Dashboard")
+        val mapSettings = module("map", "Bản đồ")
         val brouter = module("brouter", "BRouter")
         val qr = module("qr", "QR")
         val media = module("media", "Media")
         val calendar = module("calendar", "Lịch")
         val traffic = module("traffic", "Giao thông")
         val modules = listOf(
-            overview, dashboard, brouter, qr, media, calendar, traffic
+            overview, dashboard, mapSettings, brouter, qr, media, calendar, traffic
         )
 
         // ---------- Tổng quan ----------
@@ -214,8 +216,11 @@ class MainActivity : Activity() {
             }
         })
 
-        // ---------- Dashboard / bản đồ ----------
+        // ---------- Dashboard ----------
         addDashboardSettings(dashboard.body)
+
+        // ---------- Bản đồ / camera dẫn đường ----------
+        addDrivingMapSettings(mapSettings.body)
 
         // ---------- BRouter ----------
         addBRouterModule(brouter.body)
@@ -478,6 +483,147 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         refreshBRouterStatus()
+    }
+
+    private fun addDrivingMapSettings(root: LinearLayout) {
+        val current = try {
+            settingsRepository.read()
+        } catch (e: Exception) {
+            root.addView(TextView(this).apply {
+                text = "Không đọc được cấu hình bản đồ."
+            })
+            return
+        }
+
+        root.addView(TextView(this).apply {
+            text = "Hiển thị bản đồ khi lái xe"
+            textSize = 20f
+        })
+        root.addView(TextView(this).apply {
+            text = "Các mục này áp dụng trực tiếp cho camera bản đồ trên điện thoại " +
+                "và Android Auto debug."
+            textSize = 13f
+        })
+
+        fun toggle(
+            label: String,
+            selected: Boolean,
+            update: (DashboardSettings, Boolean) -> DashboardSettings
+        ) {
+            val box = CheckBox(this).apply {
+                text = label
+                isChecked = selected
+            }
+            var restoring = false
+            box.setOnCheckedChangeListener { _, checked ->
+                if (restoring) return@setOnCheckedChangeListener
+                try {
+                    settingsRepository.change { latest ->
+                        update(latest, checked)
+                    }
+                } catch (e: Exception) {
+                    logErr("MainActivity:mapToggle", e)
+                    restoring = true
+                    box.isChecked = !checked
+                    restoring = false
+                }
+            }
+            root.addView(box)
+        }
+
+        toggle("Bản đồ 3D", current.map3d) { v, checked ->
+            v.copy(map3d = checked)
+        }
+        toggle("Xoay bản đồ theo hướng xe", current.rotateMapWithHeading) { v, checked ->
+            v.copy(rotateMapWithHeading = checked)
+        }
+        toggle("Tự động thu phóng theo tốc độ", current.autoZoomBySpeed) { v, checked ->
+            v.copy(autoZoomBySpeed = checked)
+        }
+        toggle("Hiện tên đường rõ ở đáy bản đồ", current.showStreetName) { v, checked ->
+            v.copy(showStreetName = checked)
+        }
+
+        fun slider(
+            title: String,
+            min: Int,
+            max: Int,
+            value: Int,
+            suffix: String,
+            save: (DashboardSettings, Int) -> DashboardSettings
+        ) {
+            val label = TextView(this).apply {
+                textSize = 15f
+            }
+            fun updateLabel(v: Int) {
+                label.text = "$title: $v$suffix"
+            }
+            updateLabel(value)
+            root.addView(label)
+            val bar = SeekBar(this).apply {
+                this.max = max - min
+                progress = value - min
+            }
+            bar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(
+                    seekBar: SeekBar?,
+                    progress: Int,
+                    fromUser: Boolean
+                ) {
+                    updateLabel(min + progress)
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                    val selected = min + (seekBar?.progress ?: 0)
+                    runCatching {
+                        settingsRepository.change { latest ->
+                            save(latest, selected)
+                        }
+                    }.onFailure {
+                        logErr("MainActivity:mapSlider", it)
+                    }
+                }
+            })
+            root.addView(bar)
+        }
+
+        slider(
+            "Camera nhìn trước",
+            1, 8,
+            current.cameraLookAheadSeconds,
+            " giây"
+        ) { v, selected -> v.copy(cameraLookAheadSeconds = selected) }
+
+        slider(
+            "Độ nghiêng 3D",
+            0, 70,
+            current.cameraTiltDegrees,
+            "°"
+        ) { v, selected -> v.copy(cameraTiltDegrees = selected) }
+
+        slider(
+            "Tự quay về vị trí hiện tại",
+            5, 60,
+            current.autoRecenterSeconds,
+            " giây"
+        ) { v, selected -> v.copy(autoRecenterSeconds = selected) }
+
+        slider(
+            "Phạt vi sai tốc độ",
+            0, 20,
+            current.speedWarningToleranceKmh,
+            " km/h"
+        ) { v, selected -> v.copy(speedWarningToleranceKmh = selected) }
+
+        root.addView(TextView(this).apply {
+            text = "Auto zoom hiện được hiệu chỉnh theo video tham khảo: tốc độ càng " +
+                "cao thì bản đồ càng lùi xa; khi giảm tốc camera tự tiến gần và giữ " +
+                "vị trí xe ở phần dưới để nhìn xa phía trước."
+            textSize = 13f
+            setPadding(0, pad / 2, 0, 0)
+        })
     }
 
     // ---------- Phase 5: centralized phone configuration ----------
