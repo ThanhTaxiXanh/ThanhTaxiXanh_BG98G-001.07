@@ -157,6 +157,8 @@ jobs:
           assert x['road_context_ways']<1_000_000
           assert x['road_rtree_rows']==x['road_context_ways']
           assert x['road_geometry_points'] >= 2*x['road_context_ways']
+          assert x['road_lane_guidance_ways'] > 0
+          assert x['road_turn_lane_ways'] > 0
           assert (root/'vietnam_signs.sqlite.gzbin').stat().st_size < 250_000_000
           print('OSM source counts:',x)
           PY

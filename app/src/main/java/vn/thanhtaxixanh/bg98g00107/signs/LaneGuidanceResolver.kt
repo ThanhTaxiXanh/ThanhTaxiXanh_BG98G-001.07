@@ -170,18 +170,22 @@ internal object LaneGuidanceResolver {
             LaneTurn.LEFT, LaneTurn.SLIGHT_LEFT, LaneTurn.SHARP_LEFT
         )
         ManeuverType.SLIGHT_LEFT,
-        ManeuverType.KEEP_LEFT,
         ManeuverType.EXIT_LEFT -> setOf(
             LaneTurn.SLIGHT_LEFT, LaneTurn.LEFT, LaneTurn.SHARP_LEFT
+        )
+        ManeuverType.KEEP_LEFT -> setOf(
+            LaneTurn.LEFT, LaneTurn.SLIGHT_LEFT, LaneTurn.THROUGH
         )
         ManeuverType.SHARP_LEFT -> setOf(LaneTurn.SHARP_LEFT, LaneTurn.LEFT)
         ManeuverType.RIGHT -> setOf(
             LaneTurn.RIGHT, LaneTurn.SLIGHT_RIGHT, LaneTurn.SHARP_RIGHT
         )
         ManeuverType.SLIGHT_RIGHT,
-        ManeuverType.KEEP_RIGHT,
         ManeuverType.EXIT_RIGHT -> setOf(
             LaneTurn.SLIGHT_RIGHT, LaneTurn.RIGHT, LaneTurn.SHARP_RIGHT
+        )
+        ManeuverType.KEEP_RIGHT -> setOf(
+            LaneTurn.RIGHT, LaneTurn.SLIGHT_RIGHT, LaneTurn.THROUGH
         )
         ManeuverType.SHARP_RIGHT -> setOf(LaneTurn.SHARP_RIGHT, LaneTurn.RIGHT)
         ManeuverType.STRAIGHT -> setOf(LaneTurn.THROUGH)

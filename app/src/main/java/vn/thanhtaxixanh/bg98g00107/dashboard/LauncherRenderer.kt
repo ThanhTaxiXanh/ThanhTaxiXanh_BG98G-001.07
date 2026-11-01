@@ -678,6 +678,8 @@ class LauncherRenderer {
             )
             x += laneW + gap
         }
+        edge.color = LINE
+        edge.strokeWidth = 2f
     }
 
     private fun laneGlyph(turns: List<LaneTurn>): String {
