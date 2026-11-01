@@ -471,11 +471,11 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                 0L
             }
             var copied = false
-            var target: Bitmap? = null
+            var bitmap: Bitmap? = null
             try {
                 val plane = img.planes[0]
                 val rw = plane.rowStride / plane.pixelStride
-                target = synchronized(frameLock) {
+                bitmap = synchronized(frameLock) {
                     val candidate = backFrame
                     if (candidate == null ||
                         candidate.width != rw ||
@@ -491,27 +491,24 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                     }
                 }
 
+                val target = bitmap
                 val buf = plane.buffer
                 buf.rewind()
                 target.copyPixelsFromBuffer(buf)
 
                 synchronized(frameLock) {
-                    if (rd !== reader) {
-                        if (!target.isRecycled) target.recycle()
-                        target = null
-                        return@synchronized
-                    }
+                    if (rd !== reader) return
                     val previous = publishedFrame
                     publishedFrame = target
                     backFrame = previous
-                    target = null
+                    bitmap = null
                     copied = true
                 }
             } catch (e: Exception) {
                 status = "Lỗi khung hình: " + e.message
             } finally {
                 img.close()
-                target?.let {
+                bitmap?.let {
                     if (!it.isRecycled) it.recycle()
                 }
             }
