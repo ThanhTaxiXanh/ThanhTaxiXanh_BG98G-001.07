@@ -23,18 +23,30 @@ import kotlin.math.max
 internal class YoloOnnxSignDetector(private val modelDir: File) {
     private val model = File(modelDir, "traffic_signs.onnx")
     private val labelsFile = File(modelDir, "labels.txt")
-    fun isReady() = model.isFile && labelsFile.isFile
-    fun labels(): List<String> = labelsFile.takeIf { it.isFile }
-        ?.readLines()?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+    // Reuse one ONNX session across sampled frames instead of reloading per frame.
+    private val env = OrtEnvironment.getEnvironment()
+    private var activeSession: OrtSession? = null
+
+    fun isReady() = model.isFile && model.length() > 100_000L
+    fun resetModel() {
+        activeSession?.close()
+        activeSession = null
+    }
+    fun close() = resetModel()
+
+    private fun session(): OrtSession {
+        activeSession?.let { return it }
+        val options = OrtSession.SessionOptions()
+        return try {
+            options.setIntraOpNumThreads(2)
+            env.createSession(model.absolutePath,options).also { activeSession=it }
+        } finally { options.close() }
+    }
 
     fun detect(bitmap: Bitmap): List<AiDetection> {
-        require(isReady()) { "Chưa nhập mô hình ONNX và labels.txt" }
-        val labels = labels()
-        require(labels.size in 2..512) { "Nhãn lớp không hợp lệ (2..512)" }
-        val env = OrtEnvironment.getEnvironment()
-        OrtSession.SessionOptions().use { opts ->
-            opts.setIntraOpNumThreads(2)
-            env.createSession(model.absolutePath, opts).use { session ->
+        require(isReady()) { "Chưa nhập mô hình YOLOv8/VTSR ONNX" }
+        val session = session()
+        run {
                 val inputName = session.inputNames.first()
                 val inputShape = (session.inputInfo[inputName]?.info as? TensorInfo)?.shape
                     ?: error("Không đọc được shape đầu vào")
@@ -82,6 +94,25 @@ internal class YoloOnnxSignDetector(private val modelDir: File) {
                                 ?: error("Model phải xuất float32 (raw YOLOv8)")
                             val values = FloatArray(rows*columns)
                             buffer.get(values)
+                            val channelCount = when {
+                                rows in 6..516 && columns > rows -> rows
+                                columns in 6..516 && rows > columns -> columns
+                                else -> error("Model không có output YOLOv8 raw phù hợp")
+                            }
+                            val expected=channelCount-4
+                            val metadata=session.metadata.customMetadata
+                            val labelsFromModel=YoloLabelOrder.fromOnnxMetadata(
+                                metadata["names"] ?: metadata["metadata"], expected)
+                            val labelsFromFile=labelsFile.takeIf { it.isFile }?.let {
+                                YoloLabelOrder.fromLabelsFile(it.readText(), expected)
+                            }
+                            val labels=labelsFromModel ?: labelsFromFile
+                                ?: error("Thiếu thứ tự "+expected+" nhãn: " +
+                                    "ONNX phải có metadata 'names', hoặc nhập labels.txt")
+                            require(labelsFromModel==null || labelsFromFile==null ||
+                                labelsFromModel==labelsFromFile) {
+                                "Nhãn labels.txt không khớp thứ tự ghi trong ONNX"
+                            }
                             return YoloV8Postprocess.decode(
                                 values,rows,columns,labels,size
                             )
