@@ -125,14 +125,13 @@ class RouteProgressTracker {
         if (maneuver == null) {
             val remain = ((cumulative.lastOrNull() ?: 0.0) - progressM)
                 .coerceAtLeast(0.0)
+            val arrived = remain <= 35.0
             return RouteGuidanceState(
                 active = true,
-                maneuver = ManeuverType.ARRIVE,
-                instruction = if (remain <= 35.0) {
-                    "Đã đến điểm đến"
-                } else {
-                    "Tiếp tục đến điểm đến"
-                },
+                maneuver = if (arrived) ManeuverType.ARRIVE
+                    else ManeuverType.STRAIGHT,
+                instruction = if (arrived) "Đã đến điểm đến"
+                    else "Tiếp tục theo tuyến",
                 roadName = "",
                 distanceMeters = remain.roundToInt(),
                 etaMinutes = remainingEta(route, match),
