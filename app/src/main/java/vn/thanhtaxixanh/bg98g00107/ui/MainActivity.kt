@@ -79,6 +79,7 @@ class MainActivity : Activity() {
         vn.thanhtaxixanh.bg98g00107.signs.RegionalOsmStore(applicationContext)
     }
     private lateinit var regionsInfo: TextView
+    private lateinit var nationalBundleInfo: TextView
     private var exportQrId: String? = null
     private val qrLibrary by lazy { QrLibraryStore(filesDir) }
     private lateinit var qrBox: LinearLayout
@@ -304,6 +305,13 @@ class MainActivity : Activity() {
             textSize = 13f
             setTextColor(android.graphics.Color.rgb(80, 90, 105))
         })
+        nationalBundleInfo = TextView(this).apply {
+            textSize = 13f
+            setPadding(0, pad / 2, 0, pad / 2)
+            setTextColor(android.graphics.Color.rgb(55, 72, 92))
+        }
+        traffic.body.addView(nationalBundleInfo)
+        refreshNationalBundleInfo()
         reportBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
@@ -1667,6 +1675,44 @@ class MainActivity : Activity() {
             textSize = 12f
         })
         refreshRegionInfo()
+    }
+
+    private fun refreshNationalBundleInfo() {
+        if (!::nationalBundleInfo.isInitialized) return
+        val raw = runCatching {
+            assets.open("osm/vietnam_stats.json")
+                .bufferedReader()
+                .use { it.readText() }
+        }.getOrNull()
+        if (raw == null) {
+            nationalBundleInfo.text =
+                "OSM toàn quốc: APK này chưa kèm bundle quốc gia. " +
+                "Hãy dùng artifact 'nationwide Vietnam OSM' để có speed/sign/lane offline."
+            return
+        }
+        val stats = runCatching {
+            org.json.JSONObject(raw)
+        }.getOrNull()
+        if (stats == null) {
+            nationalBundleInfo.text =
+                "OSM toàn quốc: có asset nhưng không đọc được thống kê."
+            return
+        }
+        val roads = stats.optInt("road_context_ways", 0)
+        val signs = stats.optInt("sign_nodes", 0)
+        if (!stats.has("road_turn_lane_ways")) {
+            nationalBundleInfo.text =
+                "OSM toàn quốc: bundle thế hệ cũ · $roads đoạn đường · $signs biển/camera · " +
+                "chưa có dữ liệu hướng dẫn làn."
+            return
+        }
+        val laneWays = stats.optInt("road_lane_guidance_ways", 0)
+        val turnWays = stats.optInt("road_turn_lane_ways", 0)
+        val destinationWays = stats.optInt("road_destination_lane_ways", 0)
+        nationalBundleInfo.text =
+            "OSM toàn quốc V33 · $roads đoạn ngữ cảnh · $signs biển/camera\n" +
+            "Lane guidance: $laneWays đoạn · turn:lanes: $turnWays · " +
+            "destination:lanes: $destinationWays"
     }
 
     private fun refreshRegionInfo() {
