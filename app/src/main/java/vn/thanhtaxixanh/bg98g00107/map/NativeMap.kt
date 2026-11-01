@@ -134,12 +134,14 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     private var lastOfflineRoadLat = Double.NaN
     private var lastOfflineRoadLon = Double.NaN
     private var offlineRoadLoading = false
+    private var offlineRoadRequestId = 0L
     private var regionMarkers: List<vn.thanhtaxixanh.bg98g00107.signs.RegionalOsmStore.Marker> =
         emptyList()
     private var regionKey = Int.MIN_VALUE
     private val reportStore = TrafficReportStore(File(appCtx.filesDir, "traffic_reports_v1.json"))
     private val settingsStore = DashboardSettingsRepository(appCtx)
     private val reportWorker = Executors.newSingleThreadExecutor()
+    private val roadWorker = Executors.newSingleThreadExecutor()
     private var reportSnapshot: List<TrafficReport> = emptyList()
     private var reportLayerEnabled = false
     private var reportKey = Int.MIN_VALUE
@@ -475,6 +477,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         offlineRoadContext = emptyList()
         offlineSpeedResolver.reset()
         offlineRoadLoading = false
+        offlineRoadRequestId++
         lastOfflineRoadFetchMs = -10_000L
         lastOfflineRoadLat = Double.NaN
         lastOfflineRoadLon = Double.NaN
@@ -492,6 +495,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         stop()
         onFrame = null
         reportWorker.shutdownNow()
+        roadWorker.shutdownNow()
         regionDb.close()
         nationalBundle.close()
         signs.close()
@@ -1122,23 +1126,44 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             offlineSpeedResolver.reset()
             return
         }
-        if (offlineRoadLoading || elapsed - lastOfflineRoadFetchMs < 750L) return
-        val qLat = tLat
-        val qLon = tLon
-        if (lastOfflineRoadLat.isFinite() && lastOfflineRoadLon.isFinite() &&
-            dist(qLat, qLon, lastOfflineRoadLat, lastOfflineRoadLon) < 25.0) return
+        if (offlineRoadLoading) return
+
+        val plan = vn.thanhtaxixanh.bg98g00107.signs.RoadContextRefreshPolicy.plan(
+            lat = tLat,
+            lon = tLon,
+            headingDegrees = tHeading,
+            moving = moving,
+            speedMs = speedMs.toDouble()
+        )
+        if (!vn.thanhtaxixanh.bg98g00107.signs.RoadContextRefreshPolicy.shouldRefresh(
+                nowMs = elapsed,
+                lastFetchMs = lastOfflineRoadFetchMs,
+                lastCenterLat = lastOfflineRoadLat,
+                lastCenterLon = lastOfflineRoadLon,
+                plan = plan,
+                hasCandidates = offlineRoadContext.isNotEmpty()
+            )
+        ) return
+
         lastOfflineRoadFetchMs = elapsed
-        lastOfflineRoadLat = qLat
-        lastOfflineRoadLon = qLon
+        lastOfflineRoadLat = plan.centerLat
+        lastOfflineRoadLon = plan.centerLon
         offlineRoadLoading = true
-        reportWorker.execute {
+        val requestId = ++offlineRoadRequestId
+        roadWorker.execute {
             val roads = try {
-                nationalBundle.nearbyRoadContext(qLat, qLon, 120.0, 300)
+                nationalBundle.nearbyRoadContext(
+                    plan.centerLat,
+                    plan.centerLon,
+                    plan.radiusM,
+                    400
+                )
             } catch (e: Exception) {
                 logErr("NativeMap:offlineRoadContext", e)
                 emptyList()
             }
             main.post {
+                if (requestId != offlineRoadRequestId) return@post
                 offlineRoadContext = roads
                 offlineRoadLoading = false
             }

@@ -2,6 +2,7 @@ package vn.thanhtaxixanh.bg98g00107.signs
 
 import vn.thanhtaxixanh.bg98g00107.road.SpeedWayGeometry
 import vn.thanhtaxixanh.bg98g00107.road.SpeedWayMatcher
+import vn.thanhtaxixanh.bg98g00107.road.RoadSpatialIndex
 
 import java.text.Normalizer
 import kotlin.math.cos
@@ -20,6 +21,9 @@ import kotlin.math.min
 internal class OfflineSpeedLimitResolver {
     private val matcher = SpeedWayMatcher()
     private val transitionGate = OfflineWayTransitionGate()
+    private var indexedRoads: List<BundledRoadContext>? = null
+    private var indexedGeometries: List<SpeedWayGeometry> = emptyList()
+    private var spatialIndex: RoadSpatialIndex? = null
 
     fun reset() {
         matcher.reset()
@@ -46,9 +50,14 @@ internal class OfflineSpeedLimitResolver {
             return unknown("OSM offline chưa có ngữ cảnh đường đủ tin cậy")
         }
 
-        val geometries = roads.map { it.geometry }
+        if (indexedRoads !== roads) {
+            indexedRoads = roads
+            indexedGeometries = roads.map { it.geometry }
+            spatialIndex = RoadSpatialIndex(indexedGeometries)
+        }
         val match = matcher.match(
-            lat, lon, heading, moving, accuracyM, geometries
+            lat, lon, heading, moving, accuracyM,
+            indexedGeometries, spatialIndex
         ) ?: return unknown("OSM offline chưa khớp chắc chắn đoạn đường")
 
         val road = roads[match.wayIndex]

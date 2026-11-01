@@ -138,7 +138,7 @@ internal class BundledVietnamOsm(private val ctx: Context) {
             JOIN road_context AS r ON r.id=idx.id
             WHERE idx.min_lon <= ? AND idx.max_lon >= ?
               AND idx.min_lat <= ? AND idx.max_lat >= ?
-            LIMIT ${limit.coerceAtMost(400)}
+            LIMIT ${(limit.coerceAtMost(400) + 1)}
         """.trimIndent()
         val out = ArrayList<BundledRoadContext>()
         db.rawQuery(sql, arrayOf(
@@ -166,6 +166,9 @@ internal class BundledVietnamOsm(private val ctx: Context) {
                 ))
             }
         }
+        // Never match against a truncated candidate set: an omitted parallel
+        // or stacked road could otherwise make an ambiguous GPS fix look safe.
+        if (out.size > limit) return emptyList()
         return out
     }
 
