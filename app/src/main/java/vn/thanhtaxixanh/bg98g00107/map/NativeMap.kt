@@ -9,6 +9,7 @@ import vn.thanhtaxixanh.bg98g00107.navigation.RoutePlanStore
 import vn.thanhtaxixanh.bg98g00107.navigation.RouteProgressTracker
 import vn.thanhtaxixanh.bg98g00107.navigation.RoutePoint
 import vn.thanhtaxixanh.bg98g00107.navigation.RouteRenderSimplifier
+import vn.thanhtaxixanh.bg98g00107.navigation.RouteTrafficMarkerMatcher
 import vn.thanhtaxixanh.bg98g00107.gps.GpsFilter
 import vn.thanhtaxixanh.bg98g00107.gps.RoadSegment
 import vn.thanhtaxixanh.bg98g00107.gps.RoadSnapMatch
@@ -149,6 +150,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     private var reportsLoading = false
     private val routeStore = RoutePlanStore(appCtx)
     private val routeTracker = RouteProgressTracker()
+    private val routeMarkerMatcher = RouteTrafficMarkerMatcher()
     private var activeRoute: RoutePlan? = null
     private var routeStamp = Long.MIN_VALUE
 
@@ -299,6 +301,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     fun setRoute(plan: RoutePlan) {
         activeRoute = plan
         routeTracker.setRoute(plan)
+        routeMarkerMatcher.setRoute(plan)
         guidanceState = RouteGuidanceState.EMPTY
         drawRoute()
         if (filteredGpsLat.isFinite() && filteredGpsLon.isFinite()) {
@@ -311,6 +314,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     fun clearRoute() {
         activeRoute = null
         routeTracker.clear()
+        routeMarkerMatcher.clear()
         guidanceState = RouteGuidanceState.EMPTY
         drawRoute()
     }
@@ -1079,13 +1083,45 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                 streetName = streetName,
                 roads = offlineRoadContext
             )
-            signsState = if (liveState.limit != null) liveState
+            val baseState = if (liveState.limit != null) liveState
                 else if (offlineState.limit != null) liveState.copy(
                     limit = offlineState.limit,
                     estimated = false,
                     status = offlineState.status,
                     roadWayId = offlineState.roadWayId
+                ) else if (offlineState.roadWayId != null) liveState.copy(
+                    status = offlineState.status,
+                    roadWayId = offlineState.roadWayId
                 ) else liveState
+
+            val routeOfflineWarnings = routeMarkerMatcher.upcoming(
+                lat = filteredGpsLat,
+                lon = filteredGpsLon,
+                headingDegrees = tHeading,
+                moving = moving,
+                accuracyM = lastAccuracyM,
+                markers = regionMarkers
+            )
+            val mergedWarnings = ArrayList<vn.thanhtaxixanh.bg98g00107.signs.UpcomingSign>()
+            mergedWarnings.addAll(baseState.upcoming)
+            for (candidate in routeOfflineWarnings) {
+                val duplicate = mergedWarnings.any { existing ->
+                    val a = existing.item.osmNodeId
+                    val b = candidate.item.osmNodeId
+                    (a != null && b != null && a == b) ||
+                        (existing.item.type == candidate.item.type &&
+                            dist(
+                                existing.item.lat,
+                                existing.item.lon,
+                                candidate.item.lat,
+                                candidate.item.lon
+                            ) < 6.0)
+                }
+                if (!duplicate) mergedWarnings.add(candidate)
+            }
+            signsState = baseState.copy(
+                upcoming = mergedWarnings.sortedBy { it.distM }.take(4)
+            )
             val near = signs.nearby(tLat, tLon, 600.0, 60)
             // Include sign type, label and limit: the same node can change meaning after refresh.
             // Check the style/source before comparing to avoid suppressing the first render.
