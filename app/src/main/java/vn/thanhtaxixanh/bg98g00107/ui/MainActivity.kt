@@ -104,13 +104,13 @@ class MainActivity : Activity() {
 
         val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(android.graphics.Color.rgb(10, 17, 29))
+            setBackgroundColor(android.graphics.Color.rgb(247, 249, 252))
         }
 
         val header = TextView(this).apply {
             text = "TTX AALauncher · Trung tâm cấu hình"
             textSize = 20f
-            setTextColor(android.graphics.Color.WHITE)
+            setTextColor(android.graphics.Color.rgb(24, 34, 48))
             setPadding(pad, pad, pad, (8 * density).toInt())
         }
         page.addView(header)
@@ -177,7 +177,7 @@ class MainActivity : Activity() {
         overview.body.addView(TextView(this).apply {
             text = "Điều khiển và kiểm tra nhanh"
             textSize = 20f
-            setTextColor(android.graphics.Color.WHITE)
+            setTextColor(android.graphics.Color.rgb(24, 34, 48))
         })
         preview = ImageView(this).apply {
             adjustViewBounds = true
@@ -198,7 +198,7 @@ class MainActivity : Activity() {
             text = "Dashboard điện thoại dùng để xem thử bố cục và trạng thái. " +
                 "Không chỉnh cấu hình khi đang lái xe."
             textSize = 13f
-            setTextColor(android.graphics.Color.LTGRAY)
+            setTextColor(android.graphics.Color.rgb(80, 90, 105))
         })
         overview.body.addView(Button(this).apply {
             text = "Cấp quyền vị trí chính xác (GPS)"
@@ -224,7 +224,7 @@ class MainActivity : Activity() {
         qr.body.addView(TextView(this).apply {
             text = "Mã QR thanh toán"
             textSize = 20f
-            setTextColor(android.graphics.Color.WHITE)
+            setTextColor(android.graphics.Color.rgb(24, 34, 48))
         })
         qr.body.addView(Button(this).apply {
             text = "Chọn ảnh mã QR từ điện thoại"
@@ -249,7 +249,7 @@ class MainActivity : Activity() {
         calendar.body.addView(TextView(this).apply {
             text = "Lịch Âm/Dương và sự kiện"
             textSize = 20f
-            setTextColor(android.graphics.Color.WHITE)
+            setTextColor(android.graphics.Color.rgb(24, 34, 48))
         })
         val today = java.time.LocalDate.now()
         val lunarToday = LunarCalendar.solarToLunar(
@@ -261,7 +261,7 @@ class MainActivity : Activity() {
                 (if (lunarToday.leap) " · tháng nhuận" else "") +
                 "\nNăm ${LunarCalendar.canChi(lunarToday.year)} · UTC+7"
             textSize = 14f
-            setTextColor(android.graphics.Color.LTGRAY)
+            setTextColor(android.graphics.Color.rgb(80, 90, 105))
         })
         eventBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -278,13 +278,13 @@ class MainActivity : Activity() {
         traffic.body.addView(TextView(this).apply {
             text = "Giao thông và dữ liệu OSM"
             textSize = 20f
-            setTextColor(android.graphics.Color.WHITE)
+            setTextColor(android.graphics.Color.rgb(24, 34, 48))
         })
         traffic.body.addView(TextView(this).apply {
             text = "Báo cáo cá nhân được lưu offline; dữ liệu OSM nhập thủ công " +
                 "được giữ tách biệt với giới hạn tốc độ xác minh."
             textSize = 13f
-            setTextColor(android.graphics.Color.LTGRAY)
+            setTextColor(android.graphics.Color.rgb(80, 90, 105))
         })
         reportBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -315,8 +315,8 @@ class MainActivity : Activity() {
             }
             tabButtons.forEachIndexed { i, button ->
                 val selected = i == index
-                button.isEnabled = !selected
-                button.alpha = if (selected) 1f else 0.78f
+                button.isEnabled = true
+                button.alpha = if (selected) 1f else 0.86f
                 button.setBackgroundColor(
                     if (selected) android.graphics.Color.rgb(37, 99, 235)
                     else android.graphics.Color.rgb(36, 45, 61)
@@ -366,13 +366,13 @@ class MainActivity : Activity() {
         root.addView(TextView(this).apply {
             text = "BRouter · định tuyến offline"
             textSize = 20f
-            setTextColor(android.graphics.Color.WHITE)
+            setTextColor(android.graphics.Color.rgb(24, 34, 48))
         })
         root.addView(TextView(this).apply {
             text = "TTX AALauncher gọi BRouter qua service btools.routingapp.BRouterService. " +
                 "BRouter phải được cài riêng và cần tải dữ liệu RD5 trước khi tính tuyến."
             textSize = 13f
-            setTextColor(android.graphics.Color.LTGRAY)
+            setTextColor(android.graphics.Color.rgb(80, 90, 105))
         })
         brouterStatus = TextView(this).apply {
             textSize = 15f
@@ -418,7 +418,7 @@ class MainActivity : Activity() {
                 "trong ô E105_N20. Nếu cần toàn Việt Nam, chọn toàn bộ lãnh thổ " +
                 "trên bản đồ tải xuống."
             textSize = 14f
-            setTextColor(android.graphics.Color.LTGRAY)
+            setTextColor(android.graphics.Color.rgb(80, 90, 105))
             setPadding(0, pad / 2, 0, 0)
         })
     }
