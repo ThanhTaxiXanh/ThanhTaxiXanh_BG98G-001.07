@@ -1151,6 +1151,11 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         offlineRoadLoading = true
         val requestId = ++offlineRoadRequestId
         roadWorker.execute {
+            val queryBeginNs = if (perfDebug) {
+                SystemClock.elapsedRealtimeNanos()
+            } else {
+                0L
+            }
             val roads = try {
                 nationalBundle.nearbyRoadContext(
                     plan.centerLat,
@@ -1162,6 +1167,12 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                 logErr("NativeMap:offlineRoadContext", e)
                 emptyList()
             }
+            if (perfDebug) {
+                performance.recordRoadContextQueryNs(
+                    SystemClock.elapsedRealtimeNanos() - queryBeginNs,
+                    roads.size
+                )
+            }
             main.post {
                 if (requestId != offlineRoadRequestId) return@post
                 offlineRoadLoading = false
@@ -1172,6 +1183,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                     // The car moved beyond this query while SQLite was busy.
                     // Discard rather than briefly matching against stale roads.
                     offlineRoadContext = emptyList()
+                    if (perfDebug) performance.recordStaleRoadContext()
                     lastOfflineRoadFetchMs = -1L
                     lastOfflineRoadLat = Double.NaN
                     lastOfflineRoadLon = Double.NaN
