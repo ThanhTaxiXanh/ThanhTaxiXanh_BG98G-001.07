@@ -290,8 +290,14 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         } else {
             "--"
         }
+        val traffic = "Traffic: limit=" +
+            (signsState.limit?.toString() ?: "--") +
+            " way=" + (signsState.roadWayId?.toString() ?: "--") +
+            " upcoming=" + signsState.upcoming.size +
+            " road_candidates=" + offlineRoadContext.size
         return "Requested: " + requested +
             "\nCapture: " + capture +
+            "\n" + traffic +
             "\n" + lastPerformanceSummary
     }
 
