@@ -685,7 +685,12 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     private fun updateRouteProgress() {
         guidanceState = if (activeRoute != null &&
             filteredGpsLat.isFinite() && filteredGpsLon.isFinite()) {
-            routeTracker.update(filteredGpsLat, filteredGpsLon)
+            routeTracker.update(
+                filteredGpsLat,
+                filteredGpsLon,
+                headingDegrees = tHeading.takeIf { moving && it.isFinite() },
+                accuracyM = lastAccuracyM.takeIf { it.isFinite() }
+            )
         } else {
             RouteGuidanceState.EMPTY
         }
