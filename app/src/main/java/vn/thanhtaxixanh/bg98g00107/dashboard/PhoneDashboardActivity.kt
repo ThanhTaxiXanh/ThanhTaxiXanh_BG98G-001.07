@@ -6,6 +6,7 @@ import vn.thanhtaxixanh.bg98g00107.car.CarService
 import vn.thanhtaxixanh.bg98g00107.core.logErr
 import vn.thanhtaxixanh.bg98g00107.map.NativeMap
 import vn.thanhtaxixanh.bg98g00107.navigation.BRouterServiceClient
+import vn.thanhtaxixanh.bg98g00107.navigation.DestinationSearch
 import vn.thanhtaxixanh.bg98g00107.navigation.RoutePlanStore
 import vn.thanhtaxixanh.bg98g00107.navigation.RoutePoint
 import vn.thanhtaxixanh.bg98g00107.navigation.RouteRequest
@@ -58,6 +59,7 @@ class PhoneDashboardActivity : Activity() {
     private val maps by lazy { NativeMap(applicationContext, handler) }
     private val renderer = LauncherRenderer()
     private val routeClient by lazy { BRouterServiceClient(applicationContext) }
+    private val destinationSearch by lazy { DestinationSearch(applicationContext) }
     private val routeStore by lazy { RoutePlanStore(applicationContext) }
     private val lifetime = PhoneDashboardLifecycle()
     private lateinit var view: DashboardCanvasView
@@ -220,6 +222,7 @@ class PhoneDashboardActivity : Activity() {
     override fun onDestroy() {
         lifetime.destroy()
         handler.removeCallbacks(ticker)
+        destinationSearch.close()
         routeClient.close()
         maps.dispose()
         super.onDestroy()
@@ -313,36 +316,74 @@ class PhoneDashboardActivity : Activity() {
         }
 
         val input = EditText(this).apply {
-            hint = "Ví dụ: 21.2817,106.1970"
+            hint = "Tên địa điểm, địa chỉ hoặc vĩ độ,kinh độ"
             inputType = InputType.TYPE_CLASS_TEXT
             setSingleLine(true)
             setPadding(28, 12, 28, 12)
         }
 
         AlertDialog.Builder(this)
-            .setTitle("Điểm đến BRouter (vĩ độ, kinh độ)")
-            .setMessage("BRouter phải được cài và đã tải RD5 cho khu vực tuyến đường.")
+            .setTitle("Tìm điểm đến")
+            .setMessage(
+                "Nhập ví dụ: Vincom Bắc Giang, Bến xe Bắc Ninh, " +
+                    "hoặc 21.2817,106.1970"
+            )
             .setView(input)
             .setNegativeButton("Hủy", null)
-            .setPositiveButton("Tính tuyến") { _, _ ->
-                val parts = input.text.toString()
-                    .trim()
-                    .split(',', ';', ' ', '\n', '\t')
-                    .filter { it.isNotBlank() }
-                val lat = parts.getOrNull(0)?.toDoubleOrNull()
-                val lon = parts.getOrNull(1)?.toDoubleOrNull()
-                if (lat == null || lon == null ||
-                    lat !in -90.0..90.0 || lon !in -180.0..180.0) {
+            .setPositiveButton("Tìm") { _, _ ->
+                val query = input.text.toString().trim()
+                if (query.length < 3) {
                     Toast.makeText(
                         this,
-                        "Tọa độ không hợp lệ.",
+                        "Hãy nhập tên địa điểm hoặc tọa độ.",
                         Toast.LENGTH_LONG
                     ).show()
                     return@setPositiveButton
                 }
-                calculateRoute(start, RoutePoint(lat, lon))
+                findDestination(start, query)
             }
             .show()
+    }
+
+    private fun findDestination(start: Location, query: String) {
+        status.text = "Đang tìm điểm đến…"
+        destinationSearch.search(
+            query = query,
+            near = RoutePoint(start.latitude, start.longitude)
+        ) { result ->
+            result.onSuccess { candidates ->
+                if (candidates.isEmpty()) {
+                    status.text = "Không tìm thấy điểm đến"
+                    Toast.makeText(
+                        this,
+                        "Không tìm thấy. Có thể nhập trực tiếp vĩ độ,kinh độ.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@onSuccess
+                }
+                if (candidates.size == 1) {
+                    calculateRoute(start, candidates.first().point)
+                    return@onSuccess
+                }
+                val labels = candidates.map { it.label }.toTypedArray()
+                AlertDialog.Builder(this)
+                    .setTitle("Chọn điểm đến")
+                    .setItems(labels) { _, which ->
+                        calculateRoute(start, candidates[which].point)
+                    }
+                    .setNegativeButton("Hủy", null)
+                    .show()
+                status.text = "Chọn một kết quả tìm kiếm"
+            }.onFailure { e ->
+                logErr("PhoneDashboard:destinationSearch", e)
+                status.text = "Không tìm được điểm đến"
+                Toast.makeText(
+                    this,
+                    e.message ?: "Không tìm được điểm đến.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
     }
 
     private fun calculateRoute(start: Location, destination: RoutePoint) {
