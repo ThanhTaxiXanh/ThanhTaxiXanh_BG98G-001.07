@@ -5,6 +5,10 @@ import vn.thanhtaxixanh.bg98g00107.calendar.Events
 import vn.thanhtaxixanh.bg98g00107.car.CarService
 import vn.thanhtaxixanh.bg98g00107.core.logErr
 import vn.thanhtaxixanh.bg98g00107.map.NativeMap
+import vn.thanhtaxixanh.bg98g00107.navigation.BRouterServiceClient
+import vn.thanhtaxixanh.bg98g00107.navigation.RoutePlanStore
+import vn.thanhtaxixanh.bg98g00107.navigation.RoutePoint
+import vn.thanhtaxixanh.bg98g00107.navigation.RouteRequest
 import vn.thanhtaxixanh.bg98g00107.signs.SignsState
 
 import android.Manifest
@@ -28,7 +32,9 @@ import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
+import android.text.InputType
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -51,6 +57,8 @@ class PhoneDashboardActivity : Activity() {
     }
     private val maps by lazy { NativeMap(applicationContext, handler) }
     private val renderer = LauncherRenderer()
+    private val routeClient by lazy { BRouterServiceClient(applicationContext) }
+    private val routeStore by lazy { RoutePlanStore(applicationContext) }
     private val lifetime = PhoneDashboardLifecycle()
     private lateinit var view: DashboardCanvasView
     private lateinit var status: TextView
@@ -66,6 +74,7 @@ class PhoneDashboardActivity : Activity() {
     private var lastEventsKey = ""
     private var eventLines: List<EventLine> = emptyList()
     private var currentPermission = false
+    private var lastLocation: Location? = null
 
     private fun hasPermission(): Boolean =
         checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -77,6 +86,7 @@ class PhoneDashboardActivity : Activity() {
             val age = SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos
             if (age < 0 || age > 10_000_000_000L) return
             lastFixUptime = SystemClock.uptimeMillis()
+            lastLocation = Location(location)
             speedKmh = if (location.hasSpeed() && location.hasAccuracy() &&
                 location.speed >= 0f && location.accuracy <= 35f) {
                 if (location.speed < 0.6f) 0
@@ -153,13 +163,23 @@ class PhoneDashboardActivity : Activity() {
             ))
         }
         addTool("← Trở lại") { finish() }
-        addTool("8 preset") { choosePreset() }
+        addTool("Tuyến") { chooseRouteDestination() }
         addTool("Sửa bố cục") {
             Toast.makeText(this, "Chỉnh sửa trong Trung tâm cấu hình.",
                 Toast.LENGTH_SHORT).show()
             finish()
         }
-        addTool("GPS của tôi") { maps.recenterMap() }
+        addTool("GPS") { maps.recenterMap() }
+        addTool("Xóa tuyến") {
+            runCatching { routeStore.clear() }
+                .onFailure { logErr("PhoneDashboard:routeClear", it) }
+            maps.clearRoute()
+            Toast.makeText(
+                this,
+                "Đã xóa tuyến đang hoạt động.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
         root.addView(toolbar)
         status = TextView(this).apply {
             text = "Dashboard cục bộ · không dùng để thao tác khi lái xe"
@@ -200,6 +220,7 @@ class PhoneDashboardActivity : Activity() {
     override fun onDestroy() {
         lifetime.destroy()
         handler.removeCallbacks(ticker)
+        routeClient.close()
         maps.dispose()
         super.onDestroy()
     }
@@ -277,6 +298,91 @@ class PhoneDashboardActivity : Activity() {
         if (maps.running() && (abs(maps.frameW - w) >= 3 ||
                 abs(maps.frameH - h) >= 3)) maps.stop()
         if (!maps.running()) maps.start(w, h)
+    }
+
+
+    private fun chooseRouteDestination() {
+        val start = lastLocation
+        if (!hasFreshGps() || start == null) {
+            Toast.makeText(
+                this,
+                "Cần GPS hiện tại trước khi tính tuyến.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+
+        val input = EditText(this).apply {
+            hint = "Ví dụ: 21.2817,106.1970"
+            inputType = InputType.TYPE_CLASS_TEXT
+            setSingleLine(true)
+            setPadding(28, 12, 28, 12)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Điểm đến BRouter (vĩ độ, kinh độ)")
+            .setMessage("BRouter phải được cài và đã tải RD5 cho khu vực tuyến đường.")
+            .setView(input)
+            .setNegativeButton("Hủy", null)
+            .setPositiveButton("Tính tuyến") { _, _ ->
+                val parts = input.text.toString()
+                    .trim()
+                    .split(',', ';', ' ', '\n', '\t')
+                    .filter { it.isNotBlank() }
+                val lat = parts.getOrNull(0)?.toDoubleOrNull()
+                val lon = parts.getOrNull(1)?.toDoubleOrNull()
+                if (lat == null || lon == null ||
+                    lat !in -90.0..90.0 || lon !in -180.0..180.0) {
+                    Toast.makeText(
+                        this,
+                        "Tọa độ không hợp lệ.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@setPositiveButton
+                }
+                calculateRoute(start, RoutePoint(lat, lon))
+            }
+            .show()
+    }
+
+    private fun calculateRoute(start: Location, destination: RoutePoint) {
+        status.text = "BRouter · đang tính tuyến offline…"
+        val heading = if (start.hasBearing()) start.bearing.toDouble() else null
+        routeClient.requestRoute(
+            RouteRequest(
+                start = RoutePoint(start.latitude, start.longitude),
+                destination = destination,
+                headingDegrees = heading
+            )
+        ) { result ->
+            result.onSuccess { route ->
+                try {
+                    routeStore.saveRaw(route.rawJson)
+                    maps.setRoute(route.plan)
+                    val km = route.plan.totalDistanceM / 1000.0
+                    val minutes = route.plan.totalTimeSec / 60
+                    status.text = "BRouter · " +
+                        String.format("%.1f", km) +
+                        " km · " + minutes + " phút"
+                    view.invalidate()
+                } catch (e: Exception) {
+                    logErr("PhoneDashboard:routeSave", e)
+                    Toast.makeText(
+                        this,
+                        "Không lưu được tuyến.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }.onFailure { e ->
+                logErr("PhoneDashboard:brouter", e)
+                status.text = "BRouter · chưa có tuyến"
+                Toast.makeText(
+                    this,
+                    e.message ?: "Không tính được tuyến BRouter.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
     }
 
     private fun choosePreset() {

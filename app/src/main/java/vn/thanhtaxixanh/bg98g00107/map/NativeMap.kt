@@ -4,6 +4,9 @@ import vn.thanhtaxixanh.bg98g00107.core.logErr
 import vn.thanhtaxixanh.bg98g00107.dashboard.DashboardSettingsRepository
 import vn.thanhtaxixanh.bg98g00107.dashboard.MapThemeMode
 import vn.thanhtaxixanh.bg98g00107.navigation.RouteGuidanceState
+import vn.thanhtaxixanh.bg98g00107.navigation.RoutePlan
+import vn.thanhtaxixanh.bg98g00107.navigation.RoutePlanStore
+import vn.thanhtaxixanh.bg98g00107.navigation.RouteProgressTracker
 import vn.thanhtaxixanh.bg98g00107.gps.GpsFilter
 import vn.thanhtaxixanh.bg98g00107.gps.RoadSegment
 import vn.thanhtaxixanh.bg98g00107.gps.RoadSnapMatch
@@ -115,6 +118,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     private val signsSrc = "ct-signs"
     private val reportsSrc = "ct-personal-reports"
     private val osmRegionsSrc = "ct-regional-osm-signs"
+    private val routeSrc = "ct-active-route"
     private val regionDb = vn.thanhtaxixanh.bg98g00107.signs.RegionalOsmStore(appCtx)
     private val nationalBundle = vn.thanhtaxixanh.bg98g00107.signs.BundledVietnamOsm(appCtx)
     private val offlineSpeedResolver = OfflineSpeedLimitResolver()
@@ -134,6 +138,10 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     private var reportKey = Int.MIN_VALUE
     private var lastReportFetchMs = -10_000L
     private var reportsLoading = false
+    private val routeStore = RoutePlanStore(appCtx)
+    private val routeTracker = RouteProgressTracker()
+    private var activeRoute: RoutePlan? = null
+    private var routeStamp = Long.MIN_VALUE
 
     private var vd: VirtualDisplay? = null
     private var reader: ImageReader? = null
@@ -226,6 +234,23 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
 
     /** Explicit phone/car map recenter command; preserves driving camera controls. */
     fun recenterMap() { recenter() }
+
+    fun setRoute(plan: RoutePlan) {
+        activeRoute = plan
+        routeTracker.setRoute(plan)
+        guidanceState = RouteGuidanceState.EMPTY
+        drawRoute()
+        if (filteredGpsLat.isFinite() && filteredGpsLon.isFinite()) {
+            updateRouteProgress()
+        }
+    }
+
+    fun clearRoute() {
+        activeRoute = null
+        routeTracker.clear()
+        guidanceState = RouteGuidanceState.EMPTY
+        drawRoute()
+    }
 
     fun setGnss(used: Int, cn0: Double) {
         satUsed = used
@@ -634,6 +659,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             dLon = tLon
             dHeading = tHeading
             fixMs = now
+            updateRouteProgress()
             return
         }
         fixMs = now
@@ -648,6 +674,16 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                 else -> tHeading
             }
             if (angDiff(cand, tHeading) >= 4.0) tHeading = cand
+        }
+        updateRouteProgress()
+    }
+
+    private fun updateRouteProgress() {
+        guidanceState = if (activeRoute != null &&
+            filteredGpsLat.isFinite() && filteredGpsLon.isFinite()) {
+            routeTracker.update(filteredGpsLat, filteredGpsLon)
+        } else {
+            RouteGuidanceState.EMPTY
         }
     }
 
@@ -793,6 +829,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     // ---------- ngày / đêm, tên đường ----------
 
     fun update(nowMs: Long) {
+        refreshPersistedRoute()
         val lat = if (hasFix) tLat else 21.0285
         val lon = if (hasFix) tLon else 105.8542
         val el = sunElevation(lat, lon, nowMs)
@@ -1238,6 +1275,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         m.setStyle(Style.Builder().fromUri(STYLE)) { style ->
             if (night) themeNight(style)
             tuneLabels(style)
+            installRoute(style)
             installSigns(style)
             installRegionalMarkers(style)
             installPersonalReports(style)
@@ -1248,6 +1286,58 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                 }
             }
         }
+    }
+
+
+    // ---------- tuyến đường BRouter ----------
+
+    private fun refreshPersistedRoute() {
+        try {
+            val snapshot = routeStore.snapshotIfChanged(routeStamp) ?: return
+            routeStamp = snapshot.stamp
+            if (snapshot.plan == null) clearRoute() else setRoute(snapshot.plan)
+        } catch (e: Exception) {
+            logErr("NativeMap:routeStore", e)
+        }
+    }
+
+    private fun installRoute(style: Style) {
+        try {
+            style.addSource(GeoJsonSource(routeSrc))
+            style.addLayer(
+                LineLayer("ct-active-route-line", routeSrc).withProperties(
+                    PropertyFactory.lineColor("#2d8cff"),
+                    PropertyFactory.lineWidth(
+                        Expression.interpolate(
+                            Expression.linear(),
+                            Expression.zoom(),
+                            Expression.stop(10, 3f),
+                            Expression.stop(14, 6f),
+                            Expression.stop(18, 10f)
+                        )
+                    ),
+                    PropertyFactory.lineOpacity(0.90f),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
+                )
+            )
+            drawRoute()
+        } catch (e: Exception) {
+            logErr("NativeMap:installRoute", e)
+        }
+    }
+
+    private fun drawRoute() {
+        val source = map?.style?.getSourceAs<GeoJsonSource>(routeSrc) ?: return
+        val plan = activeRoute
+        if (plan == null || plan.points.size < 2) {
+            source.setGeoJson(FeatureCollection.fromFeatures(emptyArray<Feature>()))
+            return
+        }
+        val line = LineString.fromLngLats(
+            plan.points.map { Point.fromLngLat(it.lon, it.lat) }
+        )
+        source.setGeoJson(Feature.fromGeometry(line))
     }
 
     private fun roadWidth(k: Float): Expression = Expression.interpolate(
