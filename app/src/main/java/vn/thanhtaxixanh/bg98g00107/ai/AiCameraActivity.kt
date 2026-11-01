@@ -50,6 +50,12 @@ class AiCameraActivity : Activity() {
         })
         body.addView(button("Nhập mô hình YOLOv8 ONNX") { pick(1,"*/*") })
         body.addView(button("Nhập labels.txt (mô hình tùy chỉnh)") { pick(2,"text/*") })
+        body.addView(button("Kiểm tra kết nối Wi-Fi 70mai A500S Plus (RTSP)") {
+            worker.execute {
+                update("Đang kiểm tra RTSP 70mai qua mạng Wi-Fi đã kết nối…")
+                update(SeventyMaiWifiProbe.probe(applicationContext))
+            }
+        })
         body.addView(button("Mở xADAS để cấu hình nguồn 70mai / Chia sẻ dữ liệu Pro") {
             val packageName="com.kaibatech.drivedeck.xadas"
             val launch=packageManager.getLaunchIntentForPackage(packageName)
