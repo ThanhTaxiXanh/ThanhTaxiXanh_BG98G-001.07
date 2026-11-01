@@ -318,8 +318,7 @@ class LauncherRenderer {
         if (name.isEmpty()) return
         // Smaller foreground label; reserve screen space for upcoming junctions.
         val size = maxOf(12f, 20f * k)
-        val ay = m.top + m.height() * 0.73f
-        val cy = minOf(ay + 60f * k, m.bottom - 28f * k)
+        val cy = m.bottom - maxOf(30f, 42f * k)
         val maxW = m.width() * 0.82f
         tp.typeface = Typeface.DEFAULT_BOLD
         tp.textSize = size
@@ -461,7 +460,8 @@ class LauncherRenderer {
         bubble(c, sb)
         val sy = sb.centerY() + nSize * 0.36f
         val lim = st.signs.limit
-        val over = lim != null && st.gpsFix && st.speedKmh != null && st.speedKmh > lim
+        val over = lim != null && st.gpsFix && st.speedKmh != null &&
+            st.speedKmh > lim + st.settings.speedWarningToleranceKmh
         text(c, spd, sb.left + padX, sy, nSize, if (over) RED else Color.WHITE, true)
         text(c, "KM/H", sb.left + padX + w3 + 10f * k, sy, uSize, MUTED, true)
         if (lim != null) {

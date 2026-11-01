@@ -91,7 +91,10 @@ internal class DrivingCameraController(
     }
 
     fun shouldRecenter(nowMs: Long): Boolean =
-        !following && nowMs - lastGestureMs > panTimeoutMs
+        shouldRecenter(nowMs, panTimeoutMs)
+
+    fun shouldRecenter(nowMs: Long, timeoutMs: Long): Boolean =
+        !following && timeoutMs > 0L && nowMs - lastGestureMs > timeoutMs
 
     fun recenter() {
         mode = preferredFollowMode

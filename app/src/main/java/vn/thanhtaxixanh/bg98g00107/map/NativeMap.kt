@@ -1,6 +1,7 @@
 package vn.thanhtaxixanh.bg98g00107.map
 
 import vn.thanhtaxixanh.bg98g00107.core.logErr
+import vn.thanhtaxixanh.bg98g00107.dashboard.DashboardSettings
 import vn.thanhtaxixanh.bg98g00107.dashboard.DashboardSettingsRepository
 import vn.thanhtaxixanh.bg98g00107.dashboard.MapThemeMode
 import vn.thanhtaxixanh.bg98g00107.navigation.RouteGuidanceState
@@ -141,6 +142,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     private var regionKey = Int.MIN_VALUE
     private val reportStore = TrafficReportStore(File(appCtx.filesDir, "traffic_reports_v1.json"))
     private val settingsStore = DashboardSettingsRepository(appCtx)
+    private var cameraSettings = DashboardSettings()
     private val reportWorker = Executors.newSingleThreadExecutor()
     private val roadWorker = Executors.newSingleThreadExecutor()
     private var reportSnapshot: List<TrafficReport> = emptyList()
@@ -206,6 +208,12 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     private var lastFrameMs = 0L
     private var interactionBoostUntilMs = 0L
     private var paused = false
+
+    private fun configuredTilt(): Double =
+        if (cameraSettings.map3d) cameraSettings.cameraTiltDegrees.toDouble() else 0.0
+
+    private fun configuredBearing(): Double =
+        if (cameraSettings.rotateMapWithHeading) dHeading else 0.0
 
     // Đoạn đường phục vụ map matching; GPS phổ thông không định vị được làn.
     private val segs = ArrayList<RoadSegment>()
@@ -707,15 +715,18 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         cameraController.recenter()
         swipeRotateBtn?.text = "↻"
         if (smKmh.isNaN()) smKmh = 0.0
-        dZoom = autoZoom(smKmh)
+        dZoom = DrivingCameraPolicy.target(
+            smKmh,
+            cameraSettings.cameraLookAheadSeconds
+        ).zoom
         val m = map ?: return
         m.moveCamera(
             CameraUpdateFactory.newCameraPosition(
                 CameraPosition.Builder()
                     .target(LatLng(dLat, dLon))
                     .zoom(dZoom)
-                    .tilt(cameraController.tiltDegrees)
-                    .bearing(dHeading)
+                    .tilt(configuredTilt())
+                    .bearing(configuredBearing())
                     .build()
             )
         )
@@ -939,13 +950,6 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
 
     // ---------- vòng lặp 30 khung hình / giây ----------
 
-    private fun autoZoom(kmh: Double): Double = when {
-        kmh <= 8.0 -> 18.0
-        kmh <= 40.0 -> 18.0 - (kmh - 8.0) / 32.0
-        kmh <= 80.0 -> 17.0 - (kmh - 40.0) / 40.0 * 0.8
-        else -> max(15.6, 16.2 - (kmh - 80.0) / 40.0 * 0.6)
-    }
-
     private fun step() {
         val m = map ?: return
         if (m.style == null) return
@@ -982,18 +986,33 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         dHeading = (((dHeading + diff * (1.0 - exp(-dt / 0.45))) % 360.0) + 360.0) % 360.0
 
         smKmh += ((if (moving) speedMs * 3.6 else 0.0) - smKmh) * (1.0 - exp(-dt / 1.5))
-        val targetZoom = cameraController.temporaryZoom(now) ?: autoZoom(smKmh)
+        val cameraTarget = DrivingCameraPolicy.target(
+            smKmh,
+            cameraSettings.cameraLookAheadSeconds
+        )
+        val targetZoom = cameraController.temporaryZoom(now)
+            ?: if (cameraSettings.autoZoomBySpeed) cameraTarget.zoom else dZoom
         dZoom += (targetZoom - dZoom) * (1.0 - exp(-dt / 0.7))
-        if (cameraController.shouldRecenter(now)) recenter()
+        if (cameraController.shouldRecenter(
+                now,
+                cameraSettings.autoRecenterSeconds * 1_000L
+            )
+        ) recenter()
 
         if (cameraController.following) {
+            val lookAhead = DrivingCameraPolicy.targetPoint(
+                dLat,
+                dLon,
+                dHeading,
+                cameraTarget.lookAheadM
+            )
             m.moveCamera(
                 CameraUpdateFactory.newCameraPosition(
                     CameraPosition.Builder()
-                        .target(LatLng(dLat, dLon))
+                        .target(LatLng(lookAhead.first, lookAhead.second))
                         .zoom(dZoom)
-                        .tilt(cameraController.tiltDegrees)
-                        .bearing(dHeading)
+                        .tilt(configuredTilt())
+                        .bearing(configuredBearing())
                         .build()
                 )
             )
@@ -1020,11 +1039,12 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
 
     fun update(nowMs: Long) {
         refreshPersistedRoute()
+        cameraSettings = runCatching { settingsStore.read() }
+            .getOrDefault(cameraSettings)
         val lat = if (hasFix) tLat else 21.0285
         val lon = if (hasFix) tLon else 105.8542
         val el = sunElevation(lat, lon, nowMs)
-        val theme = runCatching { settingsStore.read().mapTheme }
-            .getOrDefault(MapThemeMode.AUTO)
+        val theme = cameraSettings.mapTheme
         val wantNight = when (theme) {
             MapThemeMode.DARK -> true
             MapThemeMode.LIGHT -> false
@@ -1527,8 +1547,8 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                 CameraPosition.Builder()
                     .target(LatLng(dLat, dLon))
                     .zoom(dZoom)
-                    .tilt(cameraController.tiltDegrees)
-                    .bearing(dHeading)
+                    .tilt(configuredTilt())
+                    .bearing(configuredBearing())
                     .build()
             )
         )
@@ -1572,18 +1592,35 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         try {
             style.addSource(GeoJsonSource(routeSrc))
             style.addLayer(
-                LineLayer("ct-active-route-line", routeSrc).withProperties(
-                    PropertyFactory.lineColor("#2d8cff"),
+                LineLayer("ct-active-route-casing", routeSrc).withProperties(
+                    PropertyFactory.lineColor("#10281a"),
                     PropertyFactory.lineWidth(
                         Expression.interpolate(
                             Expression.linear(),
                             Expression.zoom(),
-                            Expression.stop(10, 3f),
-                            Expression.stop(14, 6f),
-                            Expression.stop(18, 10f)
+                            Expression.stop(10, 7f),
+                            Expression.stop(14, 11f),
+                            Expression.stop(18, 17f)
                         )
                     ),
-                    PropertyFactory.lineOpacity(0.90f),
+                    PropertyFactory.lineOpacity(0.88f),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
+                )
+            )
+            style.addLayer(
+                LineLayer("ct-active-route-line", routeSrc).withProperties(
+                    PropertyFactory.lineColor("#16c94f"),
+                    PropertyFactory.lineWidth(
+                        Expression.interpolate(
+                            Expression.linear(),
+                            Expression.zoom(),
+                            Expression.stop(10, 4f),
+                            Expression.stop(14, 7f),
+                            Expression.stop(18, 12f)
+                        )
+                    ),
+                    PropertyFactory.lineOpacity(0.96f),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                     PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
                 )
@@ -1642,8 +1679,8 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                     PropertyFactory.textSize(
                         Expression.interpolate(
                             Expression.linear(), Expression.zoom(),
-                            Expression.stop(14, 10f), Expression.stop(16, 14f),
-                            Expression.stop(18, 18f), Expression.stop(20, 21f)
+                            Expression.stop(14, 12f), Expression.stop(16, 17f),
+                            Expression.stop(18, 21f), Expression.stop(20, 24f)
                         )
                     ),
                     PropertyFactory.textColor(if (night) "#f8fbff" else "#26384d"),
@@ -1854,7 +1891,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             col.addView(b, lp)
         }
 
-        val tiltB = circle(c, if (cameraController.tiltDegrees > 0.0) "3D" else "2D", size) { toggleTilt() }
+        val tiltB = circle(c, if (cameraSettings.map3d) "3D" else "2D", size) { toggleTilt() }
         tiltBtn = tiltB
         add(tiltB)
         add(circle(c, "+", size) { zoomButton(1.0) })
