@@ -25,7 +25,19 @@ internal data class BundledRoadContext(
     val allConditional: String?,
     val forwardConditional: String?,
     val backwardConditional: String?,
-    val hasSpeedTag: Boolean
+    val hasSpeedTag: Boolean,
+    val lanes: Int?,
+    val forwardLanes: Int?,
+    val backwardLanes: Int?,
+    val turnLanes: String?,
+    val turnLanesForward: String?,
+    val turnLanesBackward: String?,
+    val destination: String?,
+    val destinationForward: String?,
+    val destinationBackward: String?,
+    val destinationLanes: String?,
+    val destinationLanesForward: String?,
+    val destinationLanesBackward: String?
 )
 
 /**
@@ -133,7 +145,12 @@ internal class BundledVietnamOsm(private val ctx: Context) {
             SELECT r.osm_way_id,r.highway,r.name,r.maxspeed,
                    r.forward_speed,r.backward_speed,r.conditional,
                    r.forward_conditional,r.backward_conditional,
-                   r.has_speed_tag,r.oneway,r.level,r.geometry_blob
+                   r.has_speed_tag,r.oneway,r.level,
+                   r.lanes,r.forward_lanes,r.backward_lanes,
+                   r.turn_lanes,r.turn_lanes_forward,r.turn_lanes_backward,
+                   r.destination,r.destination_forward,r.destination_backward,
+                   r.destination_lanes,r.destination_lanes_forward,
+                   r.destination_lanes_backward,r.geometry_blob
             FROM road_context_rtree AS idx
             JOIN road_context AS r ON r.id=idx.id
             WHERE idx.min_lon <= ? AND idx.max_lon >= ?
@@ -147,7 +164,7 @@ internal class BundledVietnamOsm(private val ctx: Context) {
         )).use { c ->
             while (c.moveToNext()) {
                 val geometry = RoadGeometryCodec.decode(
-                    blob = c.getBlob(12),
+                    blob = c.getBlob(24),
                     wayId = c.getLong(0),
                     level = c.getInt(11),
                     oneway = c.getInt(10)
@@ -162,7 +179,19 @@ internal class BundledVietnamOsm(private val ctx: Context) {
                     allConditional = textOrNull(c.getString(6)),
                     forwardConditional = textOrNull(c.getString(7)),
                     backwardConditional = textOrNull(c.getString(8)),
-                    hasSpeedTag = c.getInt(9) == 1
+                    hasSpeedTag = c.getInt(9) == 1,
+                    lanes = laneCountOrNull(c.getInt(12)),
+                    forwardLanes = laneCountOrNull(c.getInt(13)),
+                    backwardLanes = laneCountOrNull(c.getInt(14)),
+                    turnLanes = textOrNull(c.getString(15)),
+                    turnLanesForward = textOrNull(c.getString(16)),
+                    turnLanesBackward = textOrNull(c.getString(17)),
+                    destination = textOrNull(c.getString(18)),
+                    destinationForward = textOrNull(c.getString(19)),
+                    destinationBackward = textOrNull(c.getString(20)),
+                    destinationLanes = textOrNull(c.getString(21)),
+                    destinationLanesForward = textOrNull(c.getString(22)),
+                    destinationLanesBackward = textOrNull(c.getString(23))
                 ))
             }
         }
@@ -173,6 +202,7 @@ internal class BundledVietnamOsm(private val ctx: Context) {
     }
 
     private fun speedOrNull(value: Int): Int? = value.takeIf { it in 5..160 }
+    private fun laneCountOrNull(value: Int): Int? = value.takeIf { it in 1..12 }
     private fun textOrNull(value: String?): String? = value?.trim()?.takeIf { it.isNotEmpty() }
 
     @Synchronized fun close() {

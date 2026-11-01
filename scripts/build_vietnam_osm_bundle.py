@@ -28,6 +28,10 @@ ROAD_TYPES = {"motorway","trunk","primary","secondary","tertiary",
 SPEED_TAGS = ("maxspeed","maxspeed:forward","maxspeed:backward",
               "maxspeed:conditional","maxspeed:forward:conditional",
               "maxspeed:backward:conditional")
+LANE_GUIDANCE_TAGS = (
+    "turn:lanes","turn:lanes:forward","turn:lanes:backward",
+    "destination:lanes","destination:lanes:forward","destination:lanes:backward"
+)
 
 # Approx. 89-111 m per cell in Vietnam. One-cell expansion around every
 # speed-way segment gives a conservative ~100 m+ context corridor.
@@ -46,6 +50,18 @@ def speed_value(text):
 
 def has_speed_tag(tags):
     return any((tags.get(k) or "").strip() for k in SPEED_TAGS)
+
+def has_lane_guidance_tag(tags):
+    return any((tags.get(k) or "").strip() for k in LANE_GUIDANCE_TAGS)
+
+def lane_count(tags, key):
+    raw=(tags.get(key) or "").strip()
+    if not raw.isdigit(): return 0
+    value=int(raw)
+    return value if 1 <= value <= 12 else 0
+
+def text_tag(tags, key, cap=520):
+    return (tags.get(key,"") or "").strip()[:cap]
 
 def sign_type(tags):
     hw = tags.get("highway", "")
@@ -135,7 +151,7 @@ def create_db(path):
     db.executescript("""
     PRAGMA journal_mode=DELETE;
     PRAGMA synchronous=OFF;
-    PRAGMA user_version=32;
+    PRAGMA user_version=33;
     CREATE TABLE regions(region TEXT PRIMARY KEY,updated_ms INTEGER NOT NULL,feature_count INTEGER NOT NULL);
     CREATE TABLE markers(region TEXT NOT NULL,id TEXT NOT NULL,lat REAL NOT NULL,lon REAL NOT NULL,
         type TEXT NOT NULL,label TEXT NOT NULL,speed_value INTEGER NOT NULL,
@@ -155,6 +171,18 @@ def create_db(path):
         has_speed_tag INTEGER NOT NULL,
         oneway INTEGER NOT NULL,
         level INTEGER NOT NULL,
+        lanes INTEGER NOT NULL,
+        forward_lanes INTEGER NOT NULL,
+        backward_lanes INTEGER NOT NULL,
+        turn_lanes TEXT NOT NULL,
+        turn_lanes_forward TEXT NOT NULL,
+        turn_lanes_backward TEXT NOT NULL,
+        destination TEXT NOT NULL,
+        destination_forward TEXT NOT NULL,
+        destination_backward TEXT NOT NULL,
+        destination_lanes TEXT NOT NULL,
+        destination_lanes_forward TEXT NOT NULL,
+        destination_lanes_backward TEXT NOT NULL,
         geometry_blob BLOB NOT NULL,
         min_lon REAL NOT NULL,max_lon REAL NOT NULL,
         min_lat REAL NOT NULL,max_lat REAL NOT NULL
@@ -179,23 +207,33 @@ def main():
     args=p.parse_args()
     args.output.parent.mkdir(parents=True,exist_ok=True)
 
-    # Pass 1: index only corridors around explicit speed-tagged motor roads.
+    # Pass 1: navigation anchors are explicit speed ways or ways carrying
+    # per-lane turn/destination guidance. Nearby competitors are retained so
+    # GPS matching can still abstain on parallel/stacked roads.
     corridor=set()
     speed_way_ids=set()
+    lane_way_ids=set()
+    anchor_way_ids=set()
     class SpeedCorridor(osmium.SimpleHandler):
         def way(self,way):
             tags=dict(way.tags)
-            if tags.get("highway","") not in ROAD_TYPES or not has_speed_tag(tags):
+            if tags.get("highway","") not in ROAD_TYPES:
+                return
+            speed_tagged=has_speed_tag(tags)
+            lane_tagged=has_lane_guidance_tag(tags)
+            if not speed_tagged and not lane_tagged:
                 return
             points=points_for_way(way)
             if len(points)<2: return
-            speed_way_ids.add(way.id)
+            anchor_way_ids.add(way.id)
+            if speed_tagged: speed_way_ids.add(way.id)
+            if lane_tagged: lane_way_ids.add(way.id)
             for a,b in zip(points,points[1:]):
                 corridor.update(segment_cells(a,b,CELL_EXPAND))
 
     SpeedCorridor().apply_file(str(args.pbf),locations=True,idx="sparse_mem_array")
     if not speed_way_ids or not corridor:
-        raise RuntimeError("No speed-tagged motor-road corridor was extracted")
+        raise RuntimeError("No navigation motor-road corridor was extracted")
 
     db=create_db(args.output)
     counts=collections.Counter()
@@ -227,7 +265,8 @@ def main():
             points=points_for_way(way)
             if len(points)<2: return
             speed_tagged = way.id in speed_way_ids
-            if not speed_tagged and not way_intersects_corridor(points,corridor):
+            lane_tagged = way.id in lane_way_ids
+            if way.id not in anchor_way_ids and not way_intersects_corridor(points,corridor):
                 return
 
             all_speed=speed_value(tags.get("maxspeed",""))
@@ -238,16 +277,36 @@ def main():
             bcond=(tags.get("maxspeed:backward:conditional","") or "")[:240]
             lons=[p[0] for p in points]; lats=[p[1] for p in points]
             geometry=encode_geometry(points)
+            lanes=lane_count(tags,"lanes")
+            lanes_fwd=lane_count(tags,"lanes:forward")
+            lanes_bwd=lane_count(tags,"lanes:backward")
+            turn=text_tag(tags,"turn:lanes")
+            turn_fwd=text_tag(tags,"turn:lanes:forward")
+            turn_bwd=text_tag(tags,"turn:lanes:backward")
+            dest=text_tag(tags,"destination",240)
+            dest_fwd=text_tag(tags,"destination:forward",240)
+            dest_bwd=text_tag(tags,"destination:backward",240)
+            dest_lanes=text_tag(tags,"destination:lanes")
+            dest_lanes_fwd=text_tag(tags,"destination:lanes:forward")
+            dest_lanes_bwd=text_tag(tags,"destination:lanes:backward")
             cur=db.execute(
                 """INSERT INTO road_context(
                     osm_way_id,highway,name,maxspeed,forward_speed,backward_speed,
                     conditional,forward_conditional,backward_conditional,
-                    has_speed_tag,oneway,level,geometry_blob,
+                    has_speed_tag,oneway,level,
+                    lanes,forward_lanes,backward_lanes,
+                    turn_lanes,turn_lanes_forward,turn_lanes_backward,
+                    destination,destination_forward,destination_backward,
+                    destination_lanes,destination_lanes_forward,
+                    destination_lanes_backward,geometry_blob,
                     min_lon,max_lon,min_lat,max_lat)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (way.id,hw,(tags.get("name","") or "")[:140],
                  all_speed,fwd,bwd,cond,fcond,bcond,1 if speed_tagged else 0,
-                 oneway_value(tags),level_value(tags),geometry,
+                 oneway_value(tags),level_value(tags),
+                 lanes,lanes_fwd,lanes_bwd,turn,turn_fwd,turn_bwd,
+                 dest,dest_fwd,dest_bwd,dest_lanes,dest_lanes_fwd,
+                 dest_lanes_bwd,geometry,
                  min(lons),max(lons),min(lats),max(lats)))
             rid=cur.lastrowid
             db.execute("INSERT INTO road_context_rtree VALUES (?,?,?,?,?)",
@@ -256,8 +315,12 @@ def main():
             counts["road_geometry_points"]+=len(points)
             counts["road_geometry_encoded_bytes"]+=len(geometry)
             if speed_tagged: counts["ways_speed_tagged"]+=1
-            else: counts["context_only_ways"]+=1
+            if lane_tagged: counts["ways_lane_guidance_tagged"]+=1
+            if not speed_tagged and not lane_tagged: counts["context_only_ways"]+=1
             if all_speed or fwd or bwd: counts["ways_numeric_speed"]+=1
+            if turn or turn_fwd or turn_bwd: counts["ways_turn_lanes"]+=1
+            if dest_lanes or dest_lanes_fwd or dest_lanes_bwd:
+                counts["ways_destination_lanes"]+=1
 
     Extract().apply_file(str(args.pbf),locations=True,idx="sparse_mem_array")
     db.execute("INSERT INTO regions VALUES (?,?,?)",
@@ -275,10 +338,15 @@ def main():
         "input_filename":args.pbf.name,
         "sign_nodes":sum(v for k,v in counts.items() if k.startswith("sign_")),
         "speed_corridor_cells":len(corridor),
+        "navigation_corridor_cells":len(corridor),
+        "lane_guidance_anchor_ways":len(lane_way_ids),
         "road_context_ways":counts["road_context_ways"],
         "road_context_only_ways":counts["context_only_ways"],
         "road_speed_ways":counts["ways_speed_tagged"],
         "road_numeric_speed_ways":counts["ways_numeric_speed"],
+        "road_lane_guidance_ways":counts["ways_lane_guidance_tagged"],
+        "road_turn_lane_ways":counts["ways_turn_lanes"],
+        "road_destination_lane_ways":counts["ways_destination_lanes"],
         "road_geometry_points":counts["road_geometry_points"],
         "road_geometry_encoded_bytes":counts["road_geometry_encoded_bytes"],
         "geometry_encoding":"delta-zigzag-varint-e6",
