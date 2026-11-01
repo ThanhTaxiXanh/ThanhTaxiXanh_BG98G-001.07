@@ -307,28 +307,66 @@ class LauncherRenderer {
             textMid(c, st.mapsStatus, m.centerX(), m.centerY() + 34f * k, maxOf(12f, 16f * k), ACCENT, false, m.width() * 0.85f)
         }
 
-        if (st.settings.showStreetName) drawStreet(c, m, k, st.streetName)
+        if (st.settings.showStreetName) {
+            drawStreet(c, m, k, st.streetName, st.guidance)
+        }
         drawBubbles(c, m, k, st)
 
         c.restore()
         c.drawRoundRect(m, rad, rad, edge)
     }
 
-    private fun drawStreet(c: Canvas, m: RectF, k: Float, name: String) {
-        if (name.isEmpty()) return
-        // Smaller foreground label; reserve screen space for upcoming junctions.
+    private fun drawStreet(
+        c: Canvas,
+        m: RectF,
+        k: Float,
+        name: String,
+        guidance: RouteGuidanceState
+    ) {
+        if (name.isEmpty() && !guidance.active) return
+        val title = name.ifBlank { guidance.instruction }
         val size = maxOf(12f, 20f * k)
-        val cy = m.bottom - maxOf(30f, 42f * k)
-        val maxW = m.width() * 0.82f
+        val subSize = maxOf(10f, 13f * k)
+        val cy = m.bottom - maxOf(38f, 50f * k)
+        val maxW = m.width() * 0.86f
+        val hasSub = guidance.active && guidance.instruction.isNotBlank() &&
+            guidance.instruction != title
+        val sub = if (hasSub) {
+            val d = guidance.distanceMeters
+            if (d != null) {
+                val dist = if (d >= 1000) {
+                    String.format(java.util.Locale.US, "%.1f km", d / 1000.0)
+                } else {
+                    d.toString() + " m"
+                }
+                dist + " · " + guidance.instruction
+            } else {
+                guidance.instruction
+            }
+        } else ""
+
         tp.typeface = Typeface.DEFAULT_BOLD
         tp.textSize = size
-        val w = minOf(tp.measureText(name), maxW)
-        val r = RectF(m.centerX() - w / 2f - 14f * k, cy - size * 0.83f, m.centerX() + w / 2f + 14f * k, cy + size * 0.83f)
-        bubble(c, r, STREET)
-        // Slight depth/extrusion from two offset passes, kept subtle for driving.
-        textMid(c, name, m.centerX() + 1.6f * k, cy + 2.2f * k, size, Color.rgb(5, 10, 25), true, maxW)
-        textMid(c, name, m.centerX() + 0.6f * k, cy + 0.9f * k, size, Color.rgb(66, 95, 145), true, maxW)
-        textMid(c, name, m.centerX(), cy, size, Color.WHITE, true, maxW)
+        val titleW = minOf(tp.measureText(title), maxW)
+        tp.textSize = subSize
+        val subW = if (sub.isEmpty()) 0f else minOf(tp.measureText(sub), maxW)
+        val w = maxOf(titleW, subW)
+        val h = if (sub.isEmpty()) size * 1.65f else size * 2.25f
+        val rect = RectF(
+            m.centerX() - w / 2f - 16f * k,
+            cy - h / 2f,
+            m.centerX() + w / 2f + 16f * k,
+            cy + h / 2f
+        )
+        bubble(c, rect, STREET)
+        val titleCy = if (sub.isEmpty()) cy else cy - size * 0.28f
+        textMid(c, title, m.centerX(), titleCy, size, Color.WHITE, true, maxW)
+        if (sub.isNotEmpty()) {
+            textMid(
+                c, sub, m.centerX(), cy + size * 0.68f,
+                subSize, Color.rgb(196, 220, 255), true, maxW
+            )
+        }
     }
 
     // ---------- biểu tượng trạng thái (trên cùng bên phải) ----------
