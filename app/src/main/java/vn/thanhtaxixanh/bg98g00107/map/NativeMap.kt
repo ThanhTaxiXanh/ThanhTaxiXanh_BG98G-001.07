@@ -3,6 +3,7 @@ package vn.thanhtaxixanh.bg98g00107.map
 import vn.thanhtaxixanh.bg98g00107.core.logErr
 import vn.thanhtaxixanh.bg98g00107.dashboard.DashboardSettingsRepository
 import vn.thanhtaxixanh.bg98g00107.dashboard.MapThemeMode
+import vn.thanhtaxixanh.bg98g00107.navigation.RouteGuidanceState
 import vn.thanhtaxixanh.bg98g00107.gps.GpsFilter
 import vn.thanhtaxixanh.bg98g00107.gps.RoadSegment
 import vn.thanhtaxixanh.bg98g00107.gps.RoadSnapMatch
@@ -103,6 +104,8 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     var satUsed = 0
     var onFrame: (() -> Unit)? = null
     var signsState: SignsState = SignsState.EMPTY
+    var guidanceState: RouteGuidanceState = RouteGuidanceState.EMPTY
+        private set
 
     private val signs = RoadSigns(
         java.io.File(appCtx.filesDir, "signs_cache.json"),

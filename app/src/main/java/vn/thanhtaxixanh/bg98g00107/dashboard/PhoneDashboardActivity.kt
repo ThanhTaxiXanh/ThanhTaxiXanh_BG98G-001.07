@@ -354,7 +354,8 @@ class PhoneDashboardActivity : Activity() {
                 mapsStatus = maps.status,
                 streetName = maps.streetName.takeIf { gpsGood }.orEmpty(),
                 signs = if (gpsGood) maps.signsState else SignsState.EMPTY,
-                settings = settings
+                settings = settings,
+                guidance = maps.guidanceState
             ))
         }
 

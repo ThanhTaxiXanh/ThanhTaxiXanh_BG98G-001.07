@@ -3,6 +3,8 @@ package vn.thanhtaxixanh.bg98g00107.dashboard
 import vn.thanhtaxixanh.bg98g00107.calendar.EventLine
 import vn.thanhtaxixanh.bg98g00107.calendar.LunarCalendar
 import vn.thanhtaxixanh.bg98g00107.car.CarService
+import vn.thanhtaxixanh.bg98g00107.navigation.ManeuverType
+import vn.thanhtaxixanh.bg98g00107.navigation.RouteGuidanceState
 import vn.thanhtaxixanh.bg98g00107.signs.SignItem
 import vn.thanhtaxixanh.bg98g00107.signs.SignsState
 
@@ -34,7 +36,8 @@ data class UiState(
     val mapsStatus: String,
     val streetName: String,
     val signs: SignsState = SignsState.EMPTY,
-    val settings: DashboardSettings = DashboardSettings()
+    val settings: DashboardSettings = DashboardSettings(),
+    val guidance: RouteGuidanceState = RouteGuidanceState.EMPTY
 )
 
 class LauncherRenderer {
@@ -206,7 +209,8 @@ class LauncherRenderer {
         lastMain = main
 
         drawMain(c, main, st)
-        if (st.settings.showCalendar) drawCalendar(c, cal, st)
+        if (st.guidance.active) drawGuidance(c, cal, st.guidance)
+        else if (st.settings.showCalendar) drawCalendar(c, cal, st)
         else drawDisabledPanel(c, cal, "Lịch đã ẩn")
         if (st.settings.showQr) drawQr(c, qr, st.qrFile)
         else drawDisabledPanel(c, qr, "QR đã ẩn")
@@ -464,6 +468,75 @@ class LauncherRenderer {
             val sr = minOf(sb.height() / 2f, (m.right - sb.right - 18f * k) / 2f)
             if (sr > 12f * k) speedSign(c, sb.right + 10f * k + sr, sb.centerY(), sr, lim, st.signs.estimated, over)
         }
+    }
+
+    // ---------- dẫn đường / turn guidance ----------
+
+    private fun drawGuidance(c: Canvas, r: RectF, g: RouteGuidanceState) {
+        val k = minOf(r.width() / 318f, r.height() / 152f, 1.2f)
+        card(c, r, 24f * k)
+        val pad = maxOf(10f, 14f * k)
+        val iconR = minOf(r.height() * 0.28f, r.width() * 0.12f)
+        val cx = r.left + pad + iconR
+        val cy = r.centerY()
+        linePaint.color = ACCENT
+        linePaint.strokeWidth = maxOf(3f, iconR * 0.18f)
+        linePaint.style = Paint.Style.STROKE
+
+        val p = Path()
+        when (g.maneuver) {
+            ManeuverType.LEFT -> {
+                p.moveTo(cx + iconR * 0.55f, cy + iconR * 0.55f)
+                p.lineTo(cx + iconR * 0.55f, cy - iconR * 0.25f)
+                p.lineTo(cx - iconR * 0.45f, cy - iconR * 0.25f)
+                p.moveTo(cx - iconR * 0.45f, cy - iconR * 0.25f)
+                p.lineTo(cx - iconR * 0.05f, cy - iconR * 0.62f)
+                p.moveTo(cx - iconR * 0.45f, cy - iconR * 0.25f)
+                p.lineTo(cx - iconR * 0.05f, cy + iconR * 0.10f)
+            }
+            ManeuverType.RIGHT -> {
+                p.moveTo(cx - iconR * 0.55f, cy + iconR * 0.55f)
+                p.lineTo(cx - iconR * 0.55f, cy - iconR * 0.25f)
+                p.lineTo(cx + iconR * 0.45f, cy - iconR * 0.25f)
+                p.moveTo(cx + iconR * 0.45f, cy - iconR * 0.25f)
+                p.lineTo(cx + iconR * 0.05f, cy - iconR * 0.62f)
+                p.moveTo(cx + iconR * 0.45f, cy - iconR * 0.25f)
+                p.lineTo(cx + iconR * 0.05f, cy + iconR * 0.10f)
+            }
+            ManeuverType.U_TURN -> {
+                p.addArc(RectF(cx - iconR * 0.5f, cy - iconR * 0.5f,
+                    cx + iconR * 0.5f, cy + iconR * 0.5f), 15f, 255f)
+                p.moveTo(cx - iconR * 0.46f, cy - iconR * 0.05f)
+                p.lineTo(cx - iconR * 0.72f, cy + iconR * 0.18f)
+                p.moveTo(cx - iconR * 0.46f, cy - iconR * 0.05f)
+                p.lineTo(cx - iconR * 0.18f, cy + iconR * 0.15f)
+            }
+            else -> {
+                p.moveTo(cx, cy + iconR * 0.62f)
+                p.lineTo(cx, cy - iconR * 0.58f)
+                p.moveTo(cx, cy - iconR * 0.58f)
+                p.lineTo(cx - iconR * 0.32f, cy - iconR * 0.20f)
+                p.moveTo(cx, cy - iconR * 0.58f)
+                p.lineTo(cx + iconR * 0.32f, cy - iconR * 0.20f)
+            }
+        }
+        c.drawPath(p, linePaint)
+
+        val tx = cx + iconR + pad
+        val maxW = r.right - pad - tx
+        val distance = g.distanceMeters?.let {
+            if (it < 1000) "$it m" else String.format("%.1f km", it / 1000.0)
+        }.orEmpty()
+        val primary = g.instruction.ifBlank { "Tiếp tục theo tuyến" }
+        text(c, primary, tx, r.top + 38f * k, maxOf(14f, 20f * k),
+            Color.WHITE, true, Paint.Align.LEFT, maxW)
+        if (g.roadName.isNotBlank()) {
+            text(c, g.roadName, tx, r.top + 70f * k, maxOf(11f, 15f * k),
+                SOFT, false, Paint.Align.LEFT, maxW)
+        }
+        val eta = g.etaMinutes?.let { " · ETA $it phút" }.orEmpty()
+        text(c, distance + eta, tx, r.bottom - 18f * k, maxOf(11f, 14f * k),
+            ACCENT, true, Paint.Align.LEFT, maxW)
     }
 
     // ---------- lịch và sự kiện ----------

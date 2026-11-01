@@ -20,7 +20,9 @@ data class DashboardSettings(
     val mapTheme: MapThemeMode = MapThemeMode.AUTO,
     /** Personal notes only, never authoritative traffic signs. */
     val showPersonalReportsOnMap: Boolean = false,
-    val layoutPresetId: String = "classic",
+    // Fresh installs default to three full-width utility rows on the right.
+    // Version-1 payloads that predate layout selection still decode as "classic".
+    val layoutPresetId: String = "stacked",
     val useCustomLayout: Boolean = false,
     val customLayout: DashboardLayout? = null,
     /** Development-only Android Auto custom tile preview. Never used for release. */
