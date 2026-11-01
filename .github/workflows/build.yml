@@ -1,0 +1,310 @@
+name: Build and verify
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      inspect_signing:
+        description: 'Check existing KEYTHANHTAXIXANH keystore and show PUBLIC certificate fingerprint only'
+        required: true
+        type: boolean
+        default: false
+      publish_release:
+        description: 'Publish AA Taxi Driver signed release under new application ID (new separate installation)'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build development APK
+        run: gradle :app:assembleDebug --no-daemon --console=plain
+      - name: Test OSM parsing, turn restrictions and GPS replay
+        run: gradle :app:testDebugUnitTest --no-daemon --console=plain
+      - name: Compile Android instrumentation smoke tests (no emulator execution)
+        run: gradle :app:assembleDebugAndroidTest --no-daemon --console=plain
+      - name: Compile phone-only release manifest (no signing or publication)
+        run: gradle :app:processReleaseMainManifest --no-daemon --console=plain
+      - name: Phase 11A Android Lint
+        run: gradle :app:lintDebug --no-daemon --console=plain
+      - name: Verify release manifest has no noncompliant Navigation service
+        shell: bash
+        run: |
+          set -euo pipefail
+          release=$(find app/build/intermediates/merged_manifest/release -name AndroidManifest.xml -type f | head -1)
+          test -n "$release"
+          python3 scripts/check_merged_manifests.py "$release" --release
+          debug=$(find app/build/intermediates/merged_manifest/debug -name AndroidManifest.xml -type f | head -1)
+          test -n "$debug"
+          python3 scripts/check_merged_manifests.py "$debug" --debug
+      - name: Phase 11A compliance audit (debug may continue)
+        run: python3 scripts/phase11a_car_policy_gate.py --audit
+      - name: Unit tests for Phase 11A compliance audit
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+      - name: Verify AA Taxi Driver package identity and display name
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          badging=$("$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$apk")
+          printf '%s\n' "$badging" | grep -F "package: name='vn.thanhtaxixanh.bg98g00107'"
+          printf '%s\n' "$badging" | grep -F "application-label:'AA Taxi Driver'"
+      - name: Upload debug APK for testing
+        uses: actions/upload-artifact@v4
+        with:
+          name: AA-Taxi-Driver-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Audit historical release APK signing certificates
+        shell: bash
+        run: |
+          set -euo pipefail
+          for release in 1 71; do
+            apk="$RUNNER_TEMP/cartaxi-build-${release}.apk"
+            curl --fail --location --retry 3 --silent --show-error \
+              "https://github.com/ThanhTaxiXanh/CarTaxiLauncher/releases/download/build-${release}/app-debug.apk" -o "$apk"
+            test -s "$apk"
+            echo "--- Signing certificate for build-${release} ---"
+            "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --print-certs "$apk" | grep -E 'Signer #1 certificate SHA-256 digest|Signer #1 certificate DN'
+            rm -f "$apk"
+          done
+
+
+  bundled_vietnam_osm:
+    name: Build offline Vietnam OSM APK
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Install pyosmium
+        run: python3 -m pip install --user --disable-pip-version-check osmium
+      - name: Download complete Geofabrik Vietnam PBF
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/osm"
+          curl --fail --location --retry 4 --retry-delay 15 --connect-timeout 30 \
+            --max-time 1800 --show-error \
+            https://download.geofabrik.de/asia/vietnam-latest.osm.pbf \
+            -o "$RUNNER_TEMP/osm/vietnam-latest.osm.pbf"
+          test "$(stat -c '%s' "$RUNNER_TEMP/osm/vietnam-latest.osm.pbf")" -gt 100000000
+          sha256sum "$RUNNER_TEMP/osm/vietnam-latest.osm.pbf" > "$RUNNER_TEMP/osm/source.sha256"
+      - name: Install native Osmium PBF tag filter
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq osmium-tool
+      - name: Pre-filter motor-road context and sign/camera OSM nodes
+        shell: bash
+        run: |
+          set -euo pipefail
+          osmium tags-filter "$RUNNER_TEMP/osm/vietnam-latest.osm.pbf" \
+            'n/traffic_sign' 'n/traffic_sign:forward' 'n/traffic_sign:backward' \
+            'n/maxspeed' 'n/enforcement' 'n/traffic_calming' \
+            'n/highway=speed_camera,stop,give_way,traffic_signals' \
+            'n/railway=level_crossing' \
+            'w/highway=motorway,trunk,primary,secondary,tertiary,unclassified,residential,living_street,service,motorway_link,trunk_link,primary_link,secondary_link,tertiary_link' \
+            --output "$RUNNER_TEMP/osm/filtered-speed-signs.osm.pbf" \
+            --overwrite
+          test -s "$RUNNER_TEMP/osm/filtered-speed-signs.osm.pbf"
+          du -h "$RUNNER_TEMP/osm/"*.pbf
+      - name: Extract real OSM signs, cameras and road speeds to bundled SQLite
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/osm/extract" app/src/debug/assets/osm
+          python3 scripts/build_vietnam_osm_bundle.py \
+            "$RUNNER_TEMP/osm/filtered-speed-signs.osm.pbf" \
+            --output "$RUNNER_TEMP/osm/extract/vietnam_signs.sqlite" \
+            --stats "$RUNNER_TEMP/osm/extract/osm_stats.json"
+          sha256sum "$RUNNER_TEMP/osm/extract/vietnam_signs.sqlite" | cut -d' ' -f1 \
+            > app/src/debug/assets/osm/vietnam_signs.sha256
+          gzip -n -9 -c "$RUNNER_TEMP/osm/extract/vietnam_signs.sqlite" \
+            > app/src/debug/assets/osm/vietnam_signs.sqlite.gzbin
+          cp "$RUNNER_TEMP/osm/extract/osm_stats.json" app/src/debug/assets/osm/vietnam_stats.json
+          python3 - <<'PY'
+          import json,pathlib
+          root=pathlib.Path('app/src/debug/assets/osm')
+          x=json.loads((root/'vietnam_stats.json').read_text())
+          assert x['sign_nodes']>0 and x['road_context_ways']>x['road_speed_ways']>0
+          assert x['road_context_only_ways']>0
+          assert x['road_context_ways']<1_000_000
+          assert x['road_rtree_rows']==x['road_context_ways']
+          assert x['road_geometry_points'] >= 2*x['road_context_ways']
+          assert (root/'vietnam_signs.sqlite.gzbin').stat().st_size < 250_000_000
+          print('OSM source counts:',x)
+          PY
+      - name: Build clean debug APK containing nationwide OSM dataset
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Generated source-set inputs were added after the checkout.
+          # Clean avoids restoring an APK/mergedAssets cached before extraction.
+          gradle :app:clean :app:assembleDebug --no-daemon --console=plain
+      - name: Verify nationwide SQLite assets and hashes inside APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          echo 'OSM-related ZIP paths:'
+          unzip -Z1 "$apk" | grep -Ei 'osm|vietnam' || true
+          python3 - <<'PY'
+          import hashlib, pathlib, zipfile
+          apk=pathlib.Path("app/build/outputs/apk/debug/app-debug.apk")
+          asset_dir=pathlib.Path("app/src/debug/assets/osm")
+          with zipfile.ZipFile(apk) as z:
+              names=set(z.namelist())
+              expected={"assets/osm/vietnam_signs.sqlite.gzbin",
+                        "assets/osm/vietnam_signs.sha256",
+                        "assets/osm/vietnam_stats.json"}
+              missing=expected-names
+              if missing:
+                  raise SystemExit("Missing bundled OSM assets: "+repr(sorted(missing)))
+              for name in expected:
+                  content=z.read(name)
+                  source=(asset_dir/pathlib.PurePosixPath(name).name).read_bytes()
+                  if hashlib.sha256(content).digest()!=hashlib.sha256(source).digest():
+                      raise SystemExit("APK asset differs from generated source: "+name)
+                  print(name, "verified",len(content),"bytes")
+          PY
+      - name: Upload debug APK with nationwide Vietnam OSM and statistics
+        uses: actions/upload-artifact@v4
+        with:
+          name: AA-Taxi-Driver-Vietnam-OSM-offline-debug
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/src/debug/assets/osm/vietnam_stats.json
+          if-no-files-found: error
+          retention-days: 14
+
+  inspect_signing:
+    if: github.event_name == 'workflow_dispatch' && inputs.inspect_signing == true && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Inspect approved PKCS12 certificate
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.CARTAXI_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYTHANHTAXIXANH }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$KEYSTORE_BASE64" || -z "$KEYSTORE_PASSWORD" ]]; then
+            echo '::error::Configure CARTAXI_KEYSTORE_BASE64 and KEYTHANHTAXIXANH secrets first'
+            exit 1
+          fi
+          key="$RUNNER_TEMP/cartaxi-inspect.p12"
+          trap 'rm -f "$key"' EXIT
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$key"
+          if ! keytool -list -storetype PKCS12 -keystore "$key" -storepass "$KEYSTORE_PASSWORD" -alias cartaxi >/dev/null 2>&1; then
+            echo '::error::Cannot open provided PKCS12 signing key with KEYTHANHTAXIXANH'
+            exit 1
+          fi
+          digest=$(keytool -exportcert -rfc -storetype PKCS12 -keystore "$key" -storepass "$KEYSTORE_PASSWORD" -alias cartaxi 2>/dev/null | openssl x509 -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          [[ -n "$digest" ]] || { echo '::error::Cannot inspect certificate'; exit 1; }
+          echo "PUBLIC signing certificate SHA-256 for CARTAXI_SIGNING_CERT_SHA256: $digest"
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release == true && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Block Android Auto release until Navigation criteria are resolved
+        run: python3 scripts/phase11a_car_policy_gate.py --release
+      - name: Restore and validate signing key
+        shell: bash
+        env:
+          CARTAXI_KEYSTORE_BASE64: ${{ secrets.CARTAXI_KEYSTORE_BASE64 }}
+          CARTAXI_KEYSTORE_PASSWORD: ${{ secrets.KEYTHANHTAXIXANH }}
+          CARTAXI_SIGNING_CERT_SHA256: ${{ vars.CARTAXI_SIGNING_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$CARTAXI_KEYSTORE_BASE64" || -z "$CARTAXI_KEYSTORE_PASSWORD" || -z "$CARTAXI_SIGNING_CERT_SHA256" ]]; then
+            echo '::error::Configure CARTAXI_KEYSTORE_BASE64, KEYTHANHTAXIXANH and CARTAXI_SIGNING_CERT_SHA256 first'
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/cartaxi-signing"
+          chmod 700 "$RUNNER_TEMP/cartaxi-signing"
+          printf '%s' "$CARTAXI_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/cartaxi-signing/release.p12"
+          chmod 600 "$RUNNER_TEMP/cartaxi-signing/release.p12"
+          keytool -list -storetype PKCS12 -keystore "$RUNNER_TEMP/cartaxi-signing/release.p12" -storepass "$CARTAXI_KEYSTORE_PASSWORD" -alias cartaxi >/dev/null
+          actual=$(keytool -exportcert -rfc -storetype PKCS12 -keystore "$RUNNER_TEMP/cartaxi-signing/release.p12" -storepass "$CARTAXI_KEYSTORE_PASSWORD" -alias cartaxi | openssl x509 -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:lower:]' '[:upper:]')
+          expected=$(printf '%s' "$CARTAXI_SIGNING_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          if [[ -z "$actual" || "$actual" != "$expected" ]]; then
+            echo '::error::Signing certificate does not match approved private-key certificate fingerprint'
+            exit 1
+          fi
+      - name: Build signed release APK
+        env:
+          CARTAXI_KEYSTORE_FILE: ${{ runner.temp }}/cartaxi-signing/release.p12
+          CARTAXI_KEYSTORE_PASSWORD: ${{ secrets.KEYTHANHTAXIXANH }}
+        run: gradle :app:assembleRelease --no-daemon --console=plain
+      - name: Verify APK signature and file
+        shell: bash
+        env:
+          APPROVED_CERT_SHA256: ${{ vars.CARTAXI_SIGNING_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/release/app-release.apk
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose "$apk"
+          actual=$("$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --print-certs "$apk" | sed -n 's/.*Signer #1 certificate SHA-256 digest: //p' | head -1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          expected=$(printf '%s' "$APPROVED_CERT_SHA256" | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')
+          if [[ -z "$actual" || "$actual" != "$expected" ]]; then
+            echo '::error::Built APK does not match the approved private-key certificate'
+            exit 1
+          fi
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: AA Taxi Driver Build ${{ github.run_number }}
+          files: app/build/outputs/apk/release/app-release.apk
+          fail_on_unmatched_files: true
+      - name: Remove temporary signing material
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/cartaxi-signing"
