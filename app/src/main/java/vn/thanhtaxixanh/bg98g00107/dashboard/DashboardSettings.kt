@@ -30,6 +30,9 @@ data class DashboardSettings(
     val avoidMotorways: Boolean = false,
     val avoidTollRoads: Boolean = false,
     val avoidUnpavedRoads: Boolean = true,
+    val voiceSpeedWarnings: Boolean = true,
+    val voiceCameraWarnings: Boolean = true,
+    val announceSpeedLimitChanges: Boolean = true,
     /** Personal notes only, never authoritative traffic signs. */
     val showPersonalReportsOnMap: Boolean = false,
     // Fresh installs default to three full-width utility rows on the right.
@@ -100,6 +103,9 @@ internal object DashboardSettingsCodec {
             avoidMotorways = bool("avoidMotorways", false),
             avoidTollRoads = bool("avoidTollRoads", false),
             avoidUnpavedRoads = bool("avoidUnpavedRoads", true),
+            voiceSpeedWarnings = bool("voiceSpeedWarnings", true),
+            voiceCameraWarnings = bool("voiceCameraWarnings", true),
+            announceSpeedLimitChanges = bool("announceSpeedLimitChanges", true),
             showPersonalReportsOnMap = bool("showPersonalReportsOnMap", false),
             layoutPresetId = obj.optString("layoutPresetId", "classic"),
             useCustomLayout = bool("useCustomLayout", false),
@@ -128,6 +134,9 @@ internal object DashboardSettingsCodec {
         .put("avoidMotorways", value.avoidMotorways)
         .put("avoidTollRoads", value.avoidTollRoads)
         .put("avoidUnpavedRoads", value.avoidUnpavedRoads)
+        .put("voiceSpeedWarnings", value.voiceSpeedWarnings)
+        .put("voiceCameraWarnings", value.voiceCameraWarnings)
+        .put("announceSpeedLimitChanges", value.announceSpeedLimitChanges)
         .put("showPersonalReportsOnMap", value.showPersonalReportsOnMap)
         .put("layoutPresetId", value.layoutPresetId)
         .put("useCustomLayout", value.useCustomLayout)
