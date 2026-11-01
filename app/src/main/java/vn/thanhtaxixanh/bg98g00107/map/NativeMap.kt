@@ -22,6 +22,8 @@ import vn.thanhtaxixanh.bg98g00107.signs.BundledRoadContext
 import vn.thanhtaxixanh.bg98g00107.signs.OfflineSpeedLimitResolver
 import vn.thanhtaxixanh.bg98g00107.signs.RoadSigns
 import vn.thanhtaxixanh.bg98g00107.signs.SignsState
+import vn.thanhtaxixanh.bg98g00107.trips.SavedTripPoint
+import vn.thanhtaxixanh.bg98g00107.trips.TripHistoryStore
 
 import android.app.Presentation
 import android.content.Context
@@ -128,6 +130,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     private val reportsSrc = "ct-personal-reports"
     private val osmRegionsSrc = "ct-regional-osm-signs"
     private val routeSrc = "ct-active-route"
+    private val currentTripSrc = "ct-current-trip"
     private val regionDb = vn.thanhtaxixanh.bg98g00107.signs.RegionalOsmStore(appCtx)
     private val nationalBundle = vn.thanhtaxixanh.bg98g00107.signs.BundledVietnamOsm(appCtx)
     private val offlineSpeedResolver = OfflineSpeedLimitResolver()
@@ -143,8 +146,10 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     private val reportStore = TrafficReportStore(File(appCtx.filesDir, "traffic_reports_v1.json"))
     private val settingsStore = DashboardSettingsRepository(appCtx)
     private var cameraSettings = DashboardSettings()
+    private val tripStore = TripHistoryStore(appCtx)
     private val reportWorker = Executors.newSingleThreadExecutor()
     private val roadWorker = Executors.newSingleThreadExecutor()
+    private val tripWorker = Executors.newSingleThreadExecutor()
     private var reportSnapshot: List<TrafficReport> = emptyList()
     private var reportLayerEnabled = false
     private var reportKey = Int.MIN_VALUE
@@ -155,6 +160,10 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     private val routeMarkerMatcher = RouteTrafficMarkerMatcher()
     private var activeRoute: RoutePlan? = null
     private var routeStamp = Long.MIN_VALUE
+    private var currentTripPoints: List<SavedTripPoint> = emptyList()
+    private var currentTripLoading = false
+    private var lastCurrentTripFetchMs = -10_000L
+    private var currentTripKey = Int.MIN_VALUE
 
     private var vd: VirtualDisplay? = null
     @Volatile private var reader: ImageReader? = null
@@ -514,6 +523,8 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         onFrame = null
         reportWorker.shutdownNow()
         roadWorker.shutdownNow()
+        tripWorker.shutdownNow()
+        tripStore.close()
         regionDb.close()
         nationalBundle.close()
         signs.close()
@@ -1069,6 +1080,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             refreshStreet(nowMs)
         }
         updateOfflineRoadContext()
+        updateCurrentTrip()
         updateSigns()
         updatePersonalReports(nowMs)
         drawRegionalMarkers()
@@ -1563,6 +1575,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             if (night) themeNight(style)
             tuneLabels(style)
             installRoute(style)
+            installCurrentTrip(style)
             installSigns(style)
             installRegionalMarkers(style)
             installPersonalReports(style)
@@ -1641,6 +1654,80 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         val renderPoints = RouteRenderSimplifier.reduce(plan.points)
         val line = LineString.fromLngLats(
             renderPoints.map { Point.fromLngLat(it.lon, it.lat) }
+        )
+        source.setGeoJson(Feature.fromGeometry(line))
+    }
+
+    private fun installCurrentTrip(style: Style) {
+        try {
+            style.addSource(GeoJsonSource(currentTripSrc))
+            style.addLayer(
+                LineLayer("ct-current-trip-line", currentTripSrc).withProperties(
+                    PropertyFactory.lineColor("#00b8ff"),
+                    PropertyFactory.lineWidth(
+                        Expression.interpolate(
+                            Expression.linear(),
+                            Expression.zoom(),
+                            Expression.stop(10, 2f),
+                            Expression.stop(14, 4f),
+                            Expression.stop(18, 7f)
+                        )
+                    ),
+                    PropertyFactory.lineOpacity(0.72f),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
+                )
+            )
+            drawCurrentTrip()
+        } catch (e: Exception) {
+            logErr("NativeMap:installCurrentTrip", e)
+        }
+    }
+
+    private fun updateCurrentTrip() {
+        val elapsed = SystemClock.elapsedRealtime()
+        if (!cameraSettings.showCurrentTrip) {
+            if (currentTripPoints.isNotEmpty()) {
+                currentTripPoints = emptyList()
+                currentTripKey = Int.MIN_VALUE
+                drawCurrentTrip()
+            }
+            return
+        }
+        if (currentTripLoading || elapsed - lastCurrentTripFetchMs < 5_000L) return
+        lastCurrentTripFetchMs = elapsed
+        currentTripLoading = true
+        tripWorker.execute {
+            val points = try {
+                tripStore.activePoints(2_500)
+            } catch (e: Exception) {
+                logErr("NativeMap:currentTripRead", e)
+                emptyList()
+            }
+            main.post {
+                currentTripLoading = false
+                val key = points.size * 31 +
+                    (points.lastOrNull()?.timeMs?.hashCode() ?: 0)
+                if (key != currentTripKey) {
+                    currentTripKey = key
+                    currentTripPoints = points
+                    drawCurrentTrip()
+                }
+            }
+        }
+    }
+
+    private fun drawCurrentTrip() {
+        val source = map?.style?.getSourceAs<GeoJsonSource>(currentTripSrc) ?: return
+        val points = currentTripPoints
+        if (points.size < 2) {
+            source.setGeoJson(
+                FeatureCollection.fromFeatures(emptyArray<Feature>())
+            )
+            return
+        }
+        val line = LineString.fromLngLats(
+            points.map { Point.fromLngLat(it.lon, it.lat) }
         )
         source.setGeoJson(Feature.fromGeometry(line))
     }
