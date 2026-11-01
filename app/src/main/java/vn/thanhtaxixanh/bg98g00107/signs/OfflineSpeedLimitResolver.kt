@@ -78,7 +78,7 @@ internal class OfflineSpeedLimitResolver {
             return unknown("OSM offline: tên đường không khớp")
         }
 
-        if (!transitionGate.accept(match.wayId)) {
+        if (!transitionGate.accept(match.wayId, gpsFixMs)) {
             return unknown("OSM offline: đang xác nhận chuyển đoạn đường")
         }
 
