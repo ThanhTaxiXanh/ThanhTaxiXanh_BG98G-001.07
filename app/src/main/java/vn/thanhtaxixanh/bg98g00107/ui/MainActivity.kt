@@ -13,6 +13,7 @@ import vn.thanhtaxixanh.bg98g00107.dashboard.DashboardSettings
 import vn.thanhtaxixanh.bg98g00107.dashboard.DashboardSettingsRepository
 import vn.thanhtaxixanh.bg98g00107.dashboard.DashboardTile
 import vn.thanhtaxixanh.bg98g00107.dashboard.MapThemeMode
+import vn.thanhtaxixanh.bg98g00107.dashboard.MapLineColor
 import vn.thanhtaxixanh.bg98g00107.dashboard.PhoneDashboardActivity
 import vn.thanhtaxixanh.bg98g00107.media.LocalAudioService
 import vn.thanhtaxixanh.bg98g00107.qr.QrLibraryStore
@@ -737,6 +738,49 @@ class MainActivity : Activity() {
         ) { v, checked ->
             v.copy(avoidUnpavedRoads = checked)
         }
+        val rerouteLabel = TextView(this).apply {
+            textSize = 15f
+        }
+        fun updateRerouteLabel(value: Int) {
+            rerouteLabel.text = "Tính toán lại lộ trình: $value m"
+        }
+        updateRerouteLabel(routeSettings.rerouteDeviationM)
+        root.addView(rerouteLabel)
+        val rerouteBar = SeekBar(this).apply {
+            max = 80
+            progress = routeSettings.rerouteDeviationM - 20
+        }
+        rerouteBar.setOnSeekBarChangeListener(
+            object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(
+                    seekBar: SeekBar?,
+                    progress: Int,
+                    fromUser: Boolean
+                ) {
+                    updateRerouteLabel(20 + progress)
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                    val selected = 20 + (seekBar?.progress ?: 30)
+                    runCatching {
+                        settingsRepository.change { latest ->
+                            latest.copy(rerouteDeviationM = selected)
+                        }
+                    }.onFailure {
+                        logErr("MainActivity:rerouteDistance", it)
+                    }
+                }
+            }
+        )
+        root.addView(rerouteBar)
+        root.addView(TextView(this).apply {
+            text = "Ngưỡng này cần 3 GPS fix liên tiếp mới xác nhận lệch tuyến. " +
+                "Khi GPS kém, ứng dụng tự nới ngưỡng để tránh reroute nhầm."
+            textSize = 13f
+        })
+
         root.addView(TextView(this).apply {
             text = "Ba tùy chọn trên được truyền trực tiếp vào profile car-vario của " +
                 "BRouter qua extraParams. 'Tránh phà' chưa được profile chuẩn hỗ trợ " +
@@ -916,6 +960,13 @@ class MainActivity : Activity() {
         }
 
         slider(
+            "Mức thu phóng đề xuất",
+            20, 800,
+            current.autoZoomReferenceMeters,
+            " m"
+        ) { v, selected -> v.copy(autoZoomReferenceMeters = selected) }
+
+        slider(
             "Camera nhìn trước",
             1, 8,
             current.cameraLookAheadSeconds,
@@ -935,6 +986,53 @@ class MainActivity : Activity() {
             current.autoRecenterSeconds,
             " giây"
         ) { v, selected -> v.copy(autoRecenterSeconds = selected) }
+
+        fun colorButton(
+            title: String,
+            initial: MapLineColor,
+            save: (DashboardSettings, MapLineColor) -> DashboardSettings
+        ) {
+            var selected = initial
+            val button = Button(this).apply {
+                isAllCaps = false
+            }
+            fun render() {
+                button.text = "$title: ${selected.title}"
+                button.setBackgroundColor(
+                    android.graphics.Color.parseColor(selected.hex)
+                )
+                button.setTextColor(
+                    if (selected == MapLineColor.YELLOW) {
+                        android.graphics.Color.BLACK
+                    } else {
+                        android.graphics.Color.WHITE
+                    }
+                )
+            }
+            render()
+            button.setOnClickListener {
+                val all = MapLineColor.values()
+                selected = all[(selected.ordinal + 1) % all.size]
+                render()
+                runCatching {
+                    settingsRepository.change { latest ->
+                        save(latest, selected)
+                    }
+                }.onFailure {
+                    logErr("MainActivity:lineColor", it)
+                }
+            }
+            root.addView(button)
+        }
+
+        colorButton(
+            "Màu tuyến dẫn đường",
+            current.routeLineColor
+        ) { v, selected -> v.copy(routeLineColor = selected) }
+        colorButton(
+            "Màu chuyến đang ghi",
+            current.tripLineColor
+        ) { v, selected -> v.copy(tripLineColor = selected) }
 
         root.addView(TextView(this).apply {
             text = "Auto zoom hiện được hiệu chỉnh theo video tham khảo: tốc độ càng " +
