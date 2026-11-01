@@ -11,6 +11,7 @@ import vn.thanhtaxixanh.bg98g00107.navigation.RoutePlanStore
 import vn.thanhtaxixanh.bg98g00107.navigation.RoutePoint
 import vn.thanhtaxixanh.bg98g00107.navigation.RouteRequest
 import vn.thanhtaxixanh.bg98g00107.signs.SignsState
+import vn.thanhtaxixanh.bg98g00107.ui.MainActivity
 
 import android.Manifest
 import android.app.Activity
@@ -423,11 +424,26 @@ class PhoneDashboardActivity : Activity() {
             }.onFailure { e ->
                 logErr("PhoneDashboard:brouter", e)
                 status.text = "BRouter · chưa có tuyến"
-                Toast.makeText(
-                    this,
-                    e.message ?: "Không tính được tuyến BRouter.",
-                    Toast.LENGTH_LONG
-                ).show()
+                val message = e.message ?: "Không tính được tuyến BRouter."
+                AlertDialog.Builder(this)
+                    .setTitle("BRouter chưa sẵn sàng")
+                    .setMessage(
+                        message + "\n\nKiểm tra BRouter đã được cài và đã tải " +
+                            "dữ liệu RD5 cho khu vực cần di chuyển."
+                    )
+                    .setNegativeButton("Đóng", null)
+                    .setPositiveButton("Mở hướng dẫn BRouter") { _, _ ->
+                        startActivity(
+                            Intent(
+                                this@PhoneDashboardActivity,
+                                MainActivity::class.java
+                            ).putExtra(
+                                MainActivity.EXTRA_MODULE,
+                                MainActivity.MODULE_BROUTER
+                            )
+                        )
+                    }
+                    .show()
             }
         }
     }
