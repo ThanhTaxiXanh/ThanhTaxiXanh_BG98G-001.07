@@ -1,5 +1,6 @@
 package vn.thanhtaxixanh.bg98g00107
 
+import vn.thanhtaxixanh.bg98g00107.map.MapFrameRatePolicy
 import vn.thanhtaxixanh.bg98g00107.map.MapPerformanceMonitor
 
 import org.junit.Assert.assertEquals
@@ -70,5 +71,15 @@ class MapPerformanceMonitorTest {
         assertTrue(line.contains("delivered_frame_fps="))
         assertFalse(line.contains("latitude"))
         assertFalse(line.contains("longitude"))
+    }
+    @Test fun adaptiveFrameRatePrefersInteractionThenDrivingThenIdle() {
+        assertEquals(33L, MapFrameRatePolicy.delayMs(
+            hasFix = true, moving = true, interactive = true))
+        assertEquals(42L, MapFrameRatePolicy.delayMs(
+            hasFix = true, moving = true, interactive = false))
+        assertEquals(80L, MapFrameRatePolicy.delayMs(
+            hasFix = true, moving = false, interactive = false))
+        assertEquals(120L, MapFrameRatePolicy.delayMs(
+            hasFix = false, moving = false, interactive = false))
     }
 }

@@ -169,6 +169,8 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     private var dHeading = 0.0
     private var dZoom = 18.0
     private var lastFrameMs = 0L
+    private var interactionBoostUntilMs = 0L
+    private var paused = false
 
     // Đoạn đường phục vụ map matching; GPS phổ thông không định vị được làn.
     private val segs = ArrayList<RoadSegment>()
@@ -200,7 +202,15 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                     }
                 }
             }
-            main.postDelayed(this, 33L)
+            val now = SystemClock.elapsedRealtime()
+            main.postDelayed(
+                this,
+                MapFrameRatePolicy.delayMs(
+                    hasFix = hasFix,
+                    moving = moving,
+                    interactive = now < interactionBoostUntilMs
+                )
+            )
         }
     }
 
@@ -251,6 +261,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             p.show()
             p.mapView?.onStart()
             p.mapView?.onResume()
+            paused = false
             startRetry.recordSuccess()
         } catch (t: Throwable) {
             status = "Lỗi bản đồ: " + t.message
@@ -259,12 +270,40 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         }
     }
 
+    fun pause() {
+        if (vd == null || paused) return
+        main.removeCallbacks(loop)
+        try {
+            pres?.mapView?.onPause()
+            pres?.mapView?.onStop()
+            paused = true
+        } catch (t: Throwable) {
+            logErr("NativeMap:pause", t)
+        }
+    }
+
+    fun resume() {
+        if (vd == null || !paused) return
+        try {
+            pres?.mapView?.onStart()
+            pres?.mapView?.onResume()
+            paused = false
+            lastFrameMs = 0L
+            main.removeCallbacks(loop)
+            main.post(loop)
+        } catch (t: Throwable) {
+            logErr("NativeMap:resume", t)
+        }
+    }
+
     fun stop() {
         main.removeCallbacks(loop)
         try {
             pres?.mapView?.let {
-                it.onPause()
-                it.onStop()
+                if (!paused) {
+                    it.onPause()
+                    it.onStop()
+                }
                 it.onDestroy()
             }
         } catch (t: Throwable) {
@@ -275,6 +314,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         } catch (t: Throwable) {
             logErr("NativeMap:217", t)
         }
+        paused = false
         pres = null
         map = null
         arrow = null
@@ -291,6 +331,8 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         }
         reader = null
         frame = null
+        lastFrameMs = 0L
+        interactionBoostUntilMs = 0L
         segs.clear()
         roadMatcher.reset()
         lastAccuracyM = Double.POSITIVE_INFINITY
@@ -353,7 +395,12 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
 
     // ---------- cảm ứng từ Android Auto ----------
 
+    private fun boostInteraction() {
+        interactionBoostUntilMs = SystemClock.elapsedRealtime() + 1_200L
+    }
+
     fun tap(nx: Float, ny: Float) {
+        boostInteraction()
         val root = pres?.root ?: return
         val x = nx * frameW
         val y = ny * frameH
@@ -386,6 +433,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     }
 
     fun scrollBy(dx: Float, dy: Float) {
+        boostInteraction()
         val m = map ?: return
         val now = SystemClock.elapsedRealtime()
         if (!cameraController.canScroll(now)) return
@@ -405,6 +453,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     }
 
     fun fling(vx: Float, vy: Float) {
+        boostInteraction()
         if (map == null) return
         val now = SystemClock.elapsedRealtime()
         if (!cameraController.canFling(now)) return
@@ -413,6 +462,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     }
 
     fun pinch(scale: Float, nx: Float, ny: Float) {
+        boostInteraction()
         val m = map ?: return
         if (scale.isNaN() || scale < 0.2f || scale > 5f) return
         val now = SystemClock.elapsedRealtime()
@@ -456,6 +506,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     // Android Auto SurfaceCallback does not expose raw two-pointer rotation.
     // Offer explicit 15-degree map rotation, retaining the existing pan/pinch controls.
     private fun rotateMap(deltaDegrees: Double) {
+        boostInteraction()
         val m = map ?: return
         leaveFollow()
         val pos = m.cameraPosition
@@ -469,6 +520,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     }
 
     private fun toggleTilt() {
+        boostInteraction()
         cameraController.toggleTilt()
         tiltBtn?.text = if (cameraController.tiltDegrees > 0.0) "3D" else "2D"
         // Changing 2D/3D during manual pan must not recenter the vehicle.
@@ -482,6 +534,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     }
 
     private fun zoomButton(delta: Double) {
+        boostInteraction()
         val now = SystemClock.elapsedRealtime()
         if (cameraController.following) {
             val base = cameraController.temporaryZoom(now) ?: dZoom

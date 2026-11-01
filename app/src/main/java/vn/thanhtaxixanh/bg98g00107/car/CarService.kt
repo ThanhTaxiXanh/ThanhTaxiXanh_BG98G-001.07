@@ -14,7 +14,6 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.location.GnssStatus
@@ -128,6 +127,10 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
     private var locationPermission = false
     private var tickerRunning = false
     private var mapRefreshRequested = false
+    private val isDebuggable =
+        (appCtx.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    private var cachedBatteryPct = -1
+    private var lastBatteryReadMs = Long.MIN_VALUE
 
     private fun hasFineLocation(): Boolean =
         appCtx.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -158,6 +161,8 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
                 logErr("CarService:dashboardSettings", e)
                 DashboardSettings()
             }
+            refreshBatteryIfDue()
+            refreshEventsIfNeeded()
             draw()
             if (mapRefreshRequested) {
                 mapRefreshRequested = false
@@ -215,7 +220,7 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
                 Lifecycle.Event.ON_STOP -> {
                     surfaceState.onStop()
                     stopUpdates()
-                    maps.stop()
+                    maps.pause()
                 }
                 Lifecycle.Event.ON_DESTROY -> {
                     surfaceState.onDestroy()
@@ -295,15 +300,18 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
         renderer.hitMapPoint(x, y)?.let { maps.tap(it[0], it[1]) }
     }
 
-    private fun battery(): Int {
-        val i = appCtx.registerReceiver(null,
-            IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return -1
-        val level = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-        val scale = i.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-        return if (level < 0 || scale <= 0) -1 else level * 100 / scale
+    private fun refreshBatteryIfDue() {
+        val now = SystemClock.uptimeMillis()
+        if (lastBatteryReadMs != Long.MIN_VALUE &&
+            now - lastBatteryReadMs < 60_000L) return
+        lastBatteryReadMs = now
+        val manager = appCtx.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+        cachedBatteryPct = manager
+            ?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            ?.takeIf { it in 0..100 } ?: -1
     }
 
-    private fun eventLines(): List<EventLine> {
+    private fun refreshEventsIfNeeded() {
         val raw = prefs.getString("events", "") ?: ""
         val today = LocalDate.now()
         val key = raw + today.toString()
@@ -315,7 +323,6 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
                 emptyList()
             }
         }
-        return evLines
     }
 
     private fun ensureMaps() {
@@ -339,6 +346,7 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
             tickerRunning = true
             handler.post(ticker)
         }
+        if (maps.running()) maps.resume()
         registerLocation()
     }
 
@@ -405,11 +413,11 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
                 speedKmh = speedKmh.takeIf { gpsReady },
                 gpsFix = gpsReady,
                 satellites = maps.satUsed,
-                batteryPct = battery(),
+                batteryPct = cachedBatteryPct,
                 qrFile = qrFile,
                 nowMs = System.currentTimeMillis(),
                 selectedIcon = selected,
-                events = eventLines(),
+                events = evLines,
                 mapFrame = maps.frame,
                 mapFrameW = maps.frameW,
                 mapFrameH = maps.frameH,
@@ -418,10 +426,9 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
                 signs = if (gpsReady) maps.signsState else SignsState.EMPTY,
                 settings = currentSettings
             )
-            if ((appCtx.applicationInfo.flags and
-                    ApplicationInfo.FLAG_DEBUGGABLE) != 0 &&
-                currentSettings.experimentalCarDashboard) {
-                // DHU engineering preview only; noncompliant with NF-2 for release.
+            if (isDebuggable) {
+                // Personal/debug Android Auto mode: always keep the full dashboard
+                // (map + driver data + right-side utility rows) on one surface.
                 renderer.render(canvas, surfaceState.width,
                     surfaceState.height, st)
             } else {

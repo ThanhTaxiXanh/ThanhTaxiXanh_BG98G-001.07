@@ -130,3 +130,17 @@ internal data class MapPerfSnapshot(
         heapUsedBytes / 1_048_576.0
     )
 }
+
+
+/**
+ * Adaptive render cadence for the MapLibre -> VirtualDisplay pipeline.
+ * Prioritizes smooth motion while avoiding unnecessary bitmap copies when idle.
+ */
+internal object MapFrameRatePolicy {
+    fun delayMs(hasFix: Boolean, moving: Boolean, interactive: Boolean): Long = when {
+        interactive -> 33L   // ~30 fps briefly while the user manipulates the map
+        moving -> 42L        // ~24 fps while driving
+        hasFix -> 80L        // ~12.5 fps while stationary
+        else -> 120L         // ~8 fps while waiting for a GPS fix
+    }
+}
