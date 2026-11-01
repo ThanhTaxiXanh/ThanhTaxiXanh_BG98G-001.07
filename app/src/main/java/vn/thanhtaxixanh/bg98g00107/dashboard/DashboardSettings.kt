@@ -18,6 +18,15 @@ data class DashboardSettings(
     val showSigns: Boolean = true,
     val showStreetName: Boolean = true,
     val mapTheme: MapThemeMode = MapThemeMode.AUTO,
+    val map3d: Boolean = true,
+    val rotateMapWithHeading: Boolean = true,
+    val autoZoomBySpeed: Boolean = true,
+    val cameraLookAheadSeconds: Int = 4,
+    val cameraTiltDegrees: Int = 58,
+    val autoRecenterSeconds: Int = 15,
+    val speedWarningToleranceKmh: Int = 4,
+    val recordTrips: Boolean = true,
+    val showCurrentTrip: Boolean = true,
     /** Personal notes only, never authoritative traffic signs. */
     val showPersonalReportsOnMap: Boolean = false,
     // Fresh installs default to three full-width utility rows on the right.
@@ -35,6 +44,10 @@ data class DashboardSettings(
         require(!useCustomLayout || customLayout != null) {
             "Không thể sử dụng bố cục tùy chỉnh chưa lưu."
         }
+        require(cameraLookAheadSeconds in 1..8)
+        require(cameraTiltDegrees in 0..70)
+        require(autoRecenterSeconds in 5..60)
+        require(speedWarningToleranceKmh in 0..20)
     }
 }
 
@@ -60,12 +73,27 @@ internal object DashboardSettingsCodec {
             require(value is Boolean) { "Trường cấu hình $key không hợp lệ." }
             return value
         }
+        fun int(key: String, default: Int, range: IntRange): Int {
+            if (!obj.has(key)) return default
+            val value = obj.getInt(key)
+            require(value in range) { "Trường cấu hình $key ngoài giới hạn." }
+            return value
+        }
         return DashboardSettings(
             showCalendar = bool("showCalendar", true),
             showQr = bool("showQr", true),
             showSigns = bool("showSigns", true),
             showStreetName = bool("showStreetName", true),
             mapTheme = MapThemeMode.valueOf(obj.optString("mapTheme", "AUTO")),
+            map3d = bool("map3d", true),
+            rotateMapWithHeading = bool("rotateMapWithHeading", true),
+            autoZoomBySpeed = bool("autoZoomBySpeed", true),
+            cameraLookAheadSeconds = int("cameraLookAheadSeconds", 4, 1..8),
+            cameraTiltDegrees = int("cameraTiltDegrees", 58, 0..70),
+            autoRecenterSeconds = int("autoRecenterSeconds", 15, 5..60),
+            speedWarningToleranceKmh = int("speedWarningToleranceKmh", 4, 0..20),
+            recordTrips = bool("recordTrips", true),
+            showCurrentTrip = bool("showCurrentTrip", true),
             showPersonalReportsOnMap = bool("showPersonalReportsOnMap", false),
             layoutPresetId = obj.optString("layoutPresetId", "classic"),
             useCustomLayout = bool("useCustomLayout", false),
@@ -82,6 +110,15 @@ internal object DashboardSettingsCodec {
         .put("showSigns", value.showSigns)
         .put("showStreetName", value.showStreetName)
         .put("mapTheme", value.mapTheme.name)
+        .put("map3d", value.map3d)
+        .put("rotateMapWithHeading", value.rotateMapWithHeading)
+        .put("autoZoomBySpeed", value.autoZoomBySpeed)
+        .put("cameraLookAheadSeconds", value.cameraLookAheadSeconds)
+        .put("cameraTiltDegrees", value.cameraTiltDegrees)
+        .put("autoRecenterSeconds", value.autoRecenterSeconds)
+        .put("speedWarningToleranceKmh", value.speedWarningToleranceKmh)
+        .put("recordTrips", value.recordTrips)
+        .put("showCurrentTrip", value.showCurrentTrip)
         .put("showPersonalReportsOnMap", value.showPersonalReportsOnMap)
         .put("layoutPresetId", value.layoutPresetId)
         .put("useCustomLayout", value.useCustomLayout)
