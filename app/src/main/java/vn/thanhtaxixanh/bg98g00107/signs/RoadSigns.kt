@@ -112,6 +112,7 @@ class RoadSigns(private val cacheFile: File, supplementalGeoJson: String = "") {
     private var hintCenterLon = Double.NaN
 
     private val speedWayMatcher = SpeedWayMatcher()
+    private val speedWayDisplayGate = OfflineWayTransitionGate(requiredFixes = 2)
     private val turnTracker = ObservedRoadTurnTracker()
     private var lastWayId: Long? = null
     private var lastData: Data? = null
@@ -122,6 +123,7 @@ class RoadSigns(private val cacheFile: File, supplementalGeoJson: String = "") {
     private var pendV: Int? = null
     private var pendEst = false
     private var pendN = 0
+    private var lastCommitFixMs = Long.MIN_VALUE
 
     // Disk data is loaded asynchronously only near the current GPS position;
     // startup does not parse every region into memory.
@@ -592,18 +594,40 @@ class RoadSigns(private val cacheFile: File, supplementalGeoJson: String = "") {
         )
     }
 
-    private fun commit(v: Int, est: Boolean, now: Long) {
+    private fun commit(
+        v: Int,
+        est: Boolean,
+        now: Long,
+        gpsFixMs: Long
+    ) {
         val cur = shown
         if (cur == null) {
-            shown = v; shownEst = est; shownMs = now; pendV = null; pendN = 0
+            shown = v
+            shownEst = est
+            shownMs = now
+            pendV = null
+            pendN = 0
+            lastCommitFixMs = gpsFixMs
         } else if (cur == v && est == shownEst) {
-            shownMs = now; pendV = null; pendN = 0
+            shownMs = now
+            pendV = null
+            pendN = 0
+            lastCommitFixMs = gpsFixMs
         } else {
-            if (pendV == v && pendEst == est) pendN++ else {
-                pendV = v; pendEst = est; pendN = 1
+            if (pendV == v && pendEst == est) {
+                if (gpsFixMs != lastCommitFixMs) pendN++
+            } else {
+                pendV = v
+                pendEst = est
+                pendN = 1
             }
+            lastCommitFixMs = gpsFixMs
             if (pendN >= 2) {
-                shown = v; shownEst = est; shownMs = now; pendV = null; pendN = 0
+                shown = v
+                shownEst = est
+                shownMs = now
+                pendV = null
+                pendN = 0
             }
         }
     }
@@ -619,6 +643,7 @@ class RoadSigns(private val cacheFile: File, supplementalGeoJson: String = "") {
             lastData = d
             lastWayId = null
             speedWayMatcher.reset()
+            speedWayDisplayGate.reset()
             turnTracker.reset()
             shown = null
             pendV = null
@@ -630,6 +655,7 @@ class RoadSigns(private val cacheFile: File, supplementalGeoJson: String = "") {
             shown = null
             lastWayId = null
             speedWayMatcher.reset()
+            speedWayDisplayGate.reset()
             pendV = null
             pendN = 0
         }
@@ -642,6 +668,7 @@ class RoadSigns(private val cacheFile: File, supplementalGeoJson: String = "") {
             lat, lon, heading, moving, accuracyM, d!!.geometries, d.index
         ) else null
         val w = match?.let { d!!.ways[it.wayIndex] }
+        var transitionPending = false
         if (w != null) {
             val selected = match!!
             // Never carry a previous road's limit onto a new way.
@@ -651,22 +678,41 @@ class RoadSigns(private val cacheFile: File, supplementalGeoJson: String = "") {
                 pendN = 0
                 lastWayId = selected.wayId
             }
-            val wallTimeMs = System.currentTimeMillis()
-            val explicit = when {
-                !moving || !heading.isFinite() -> {
-                    if (w.fwdConditional != null || w.bwdConditional != null ||
-                        w.fwd != null || w.bwd != null
-                    ) null else ConditionalSpeedLimit.resolve(w.all, w.allConditional, wallTimeMs)
+
+            if (!speedWayDisplayGate.accept(selected.wayId, gpsFixMs)) {
+                transitionPending = true
+                shown = null
+                pendV = null
+                pendN = 0
+            } else {
+                val wallTimeMs = System.currentTimeMillis()
+                val explicit = when {
+                    !moving || !heading.isFinite() -> {
+                        if (w.fwdConditional != null || w.bwdConditional != null ||
+                            w.fwd != null || w.bwd != null
+                        ) null else ConditionalSpeedLimit.resolve(
+                            w.all, w.allConditional, wallTimeMs
+                        )
+                    }
+                    selected.forward -> ConditionalSpeedLimit.resolve(
+                        w.fwd ?: w.all,
+                        w.fwdConditional ?: w.allConditional,
+                        wallTimeMs
+                    )
+                    else -> ConditionalSpeedLimit.resolve(
+                        w.bwd ?: w.all,
+                        w.bwdConditional ?: w.allConditional,
+                        wallTimeMs
+                    )
                 }
-                selected.forward -> ConditionalSpeedLimit.resolve(
-                    w.fwd ?: w.all, w.fwdConditional ?: w.allConditional, wallTimeMs
-                )
-                else -> ConditionalSpeedLimit.resolve(
-                    w.bwd ?: w.all, w.bwdConditional ?: w.allConditional, wallTimeMs
-                )
+                if (explicit != null) {
+                    commit(explicit, false, now, gpsFixMs)
+                } else {
+                    shown = null
+                    pendV = null
+                    pendN = 0
+                }
             }
-            if (explicit != null) commit(explicit, false, now)
-            else { shown = null; pendV = null; pendN = 0 }
         } else {
             shown = null
             lastWayId = null
@@ -703,6 +749,7 @@ class RoadSigns(private val cacheFile: File, supplementalGeoJson: String = "") {
             !usable -> "Chưa có dữ liệu đường cập nhật"
             d!!.ways.isEmpty() -> "OSM chưa có dữ liệu đường tại đây"
             shown == null && d.signs.isEmpty() && extraSigns.isEmpty() -> "OSM thiếu tốc độ và biển báo khu vực này"
+            transitionPending -> "OSM live: đang xác nhận chuyển đoạn đường"
             shown == null && w == null -> "Chưa khớp chắc chắn đoạn đường OSM"
             shown == null -> "Giới hạn không xác định / điều kiện chưa xác minh"
             else -> "Giới hạn từ OSM (tham khảo)"

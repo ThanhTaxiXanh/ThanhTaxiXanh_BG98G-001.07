@@ -1,9 +1,10 @@
 package vn.thanhtaxixanh.bg98g00107.signs
 
 /**
- * Offline-only transition confirmation.
+ * Conservative speed-limit way-transition confirmation.
  *
  * Evidence is counted by distinct GPS fix timestamps, never by UI/state calls.
+ * Offline speed uses three fixes; fresh live OSM may use a shorter gate.
  * Re-rendering the same fix therefore cannot confirm a road transition.
  */
 internal class OfflineWayTransitionGate(private val requiredFixes: Int = 3) {
