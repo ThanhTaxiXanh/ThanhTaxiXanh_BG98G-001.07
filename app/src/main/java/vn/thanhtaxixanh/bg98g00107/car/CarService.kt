@@ -13,6 +13,7 @@ import vn.thanhtaxixanh.bg98g00107.navigation.ManeuverType
 import vn.thanhtaxixanh.bg98g00107.navigation.NavigationVoiceAnnouncer
 import vn.thanhtaxixanh.bg98g00107.navigation.RoutePlanStore
 import vn.thanhtaxixanh.bg98g00107.navigation.RoutePoint
+import vn.thanhtaxixanh.bg98g00107.navigation.RoutePreferences
 import vn.thanhtaxixanh.bg98g00107.navigation.RouteRequest
 import vn.thanhtaxixanh.bg98g00107.signs.SignsState
 import vn.thanhtaxixanh.bg98g00107.trips.TripRecorder
@@ -343,7 +344,12 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
             RouteRequest(
                 start = RoutePoint(location.latitude, location.longitude),
                 destination = destination,
-                headingDegrees = heading
+                headingDegrees = heading,
+                preferences = RoutePreferences(
+                    avoidMotorways = currentSettings.avoidMotorways,
+                    avoidTollRoads = currentSettings.avoidTollRoads,
+                    avoidUnpavedRoads = currentSettings.avoidUnpavedRoads
+                )
             )
         ) { result ->
             rerouteInFlight = false

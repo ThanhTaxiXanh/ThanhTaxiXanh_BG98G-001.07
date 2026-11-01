@@ -567,6 +567,47 @@ class MainActivity : Activity() {
             isAllCaps = false
             setOnClickListener { refreshBRouterStatus() }
         })
+        fun routeToggle(
+            label: String,
+            selected: Boolean,
+            update: (DashboardSettings, Boolean) -> DashboardSettings
+        ) {
+            val box = CheckBox(this).apply {
+                text = label
+                isChecked = selected
+            }
+            box.setOnCheckedChangeListener { _, checked ->
+                runCatching {
+                    settingsRepository.change { latest ->
+                        update(latest, checked)
+                    }
+                }.onFailure {
+                    logErr("MainActivity:brouterRouteToggle", it)
+                }
+            }
+            root.addView(box)
+        }
+
+        val routeSettings = runCatching { settingsRepository.read() }
+            .getOrDefault(DashboardSettings())
+        routeToggle("Tránh đường cao tốc", routeSettings.avoidMotorways) { v, checked ->
+            v.copy(avoidMotorways = checked)
+        }
+        routeToggle("Tránh đường thu phí", routeSettings.avoidTollRoads) { v, checked ->
+            v.copy(avoidTollRoads = checked)
+        }
+        routeToggle(
+            "Tránh đường không trải nhựa",
+            routeSettings.avoidUnpavedRoads
+        ) { v, checked ->
+            v.copy(avoidUnpavedRoads = checked)
+        }
+        root.addView(TextView(this).apply {
+            text = "Ba tùy chọn trên được truyền trực tiếp vào profile car-vario của " +
+                "BRouter qua extraParams. 'Tránh phà' chưa được profile chuẩn hỗ trợ " +
+                "nên chưa bật để tránh tạo tùy chọn không có tác dụng."
+            textSize = 13f
+        })
         root.addView(TextView(this).apply {
             text = "Bước 1 · Download Manager → phóng to bản đồ → chọn khu vực " +
                 "cần chạy → Start Download để tải RD5. Bắc Ninh/Bắc Giang nằm " +

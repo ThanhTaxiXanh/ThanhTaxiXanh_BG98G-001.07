@@ -27,6 +27,9 @@ data class DashboardSettings(
     val speedWarningToleranceKmh: Int = 4,
     val recordTrips: Boolean = true,
     val showCurrentTrip: Boolean = true,
+    val avoidMotorways: Boolean = false,
+    val avoidTollRoads: Boolean = false,
+    val avoidUnpavedRoads: Boolean = true,
     /** Personal notes only, never authoritative traffic signs. */
     val showPersonalReportsOnMap: Boolean = false,
     // Fresh installs default to three full-width utility rows on the right.
@@ -94,6 +97,9 @@ internal object DashboardSettingsCodec {
             speedWarningToleranceKmh = int("speedWarningToleranceKmh", 4, 0..20),
             recordTrips = bool("recordTrips", true),
             showCurrentTrip = bool("showCurrentTrip", true),
+            avoidMotorways = bool("avoidMotorways", false),
+            avoidTollRoads = bool("avoidTollRoads", false),
+            avoidUnpavedRoads = bool("avoidUnpavedRoads", true),
             showPersonalReportsOnMap = bool("showPersonalReportsOnMap", false),
             layoutPresetId = obj.optString("layoutPresetId", "classic"),
             useCustomLayout = bool("useCustomLayout", false),
@@ -119,6 +125,9 @@ internal object DashboardSettingsCodec {
         .put("speedWarningToleranceKmh", value.speedWarningToleranceKmh)
         .put("recordTrips", value.recordTrips)
         .put("showCurrentTrip", value.showCurrentTrip)
+        .put("avoidMotorways", value.avoidMotorways)
+        .put("avoidTollRoads", value.avoidTollRoads)
+        .put("avoidUnpavedRoads", value.avoidUnpavedRoads)
         .put("showPersonalReportsOnMap", value.showPersonalReportsOnMap)
         .put("layoutPresetId", value.layoutPresetId)
         .put("useCustomLayout", value.useCustomLayout)

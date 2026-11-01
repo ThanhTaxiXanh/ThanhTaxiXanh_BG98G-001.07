@@ -9,6 +9,7 @@ import vn.thanhtaxixanh.bg98g00107.navigation.BRouterServiceClient
 import vn.thanhtaxixanh.bg98g00107.navigation.DestinationSearch
 import vn.thanhtaxixanh.bg98g00107.navigation.RoutePlanStore
 import vn.thanhtaxixanh.bg98g00107.navigation.RoutePoint
+import vn.thanhtaxixanh.bg98g00107.navigation.RoutePreferences
 import vn.thanhtaxixanh.bg98g00107.navigation.RouteRequest
 import vn.thanhtaxixanh.bg98g00107.signs.SignsState
 import vn.thanhtaxixanh.bg98g00107.ui.MainActivity
@@ -404,7 +405,12 @@ class PhoneDashboardActivity : Activity() {
             RouteRequest(
                 start = RoutePoint(start.latitude, start.longitude),
                 destination = destination,
-                headingDegrees = heading
+                headingDegrees = heading,
+                preferences = RoutePreferences(
+                    avoidMotorways = settings.avoidMotorways,
+                    avoidTollRoads = settings.avoidTollRoads,
+                    avoidUnpavedRoads = settings.avoidUnpavedRoads
+                )
             )
         ) { result ->
             result.onSuccess { route ->

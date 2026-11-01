@@ -10,10 +10,23 @@ data class RoutePoint(val lat: Double, val lon: Double) {
     }
 }
 
+data class RoutePreferences(
+    val avoidMotorways: Boolean = false,
+    val avoidTollRoads: Boolean = false,
+    val avoidUnpavedRoads: Boolean = true
+) {
+    fun brouterExtraParams(): String = listOf(
+        "avoid_motorways=" + if (avoidMotorways) "1" else "0",
+        "avoid_toll=" + if (avoidTollRoads) "1" else "0",
+        "avoid_unpaved=" + if (avoidUnpavedRoads) "1" else "0"
+    ).joinToString("&")
+}
+
 data class RouteRequest(
     val start: RoutePoint,
     val destination: RoutePoint,
-    val headingDegrees: Double? = null
+    val headingDegrees: Double? = null,
+    val preferences: RoutePreferences = RoutePreferences()
 )
 
 data class RouteManeuver(

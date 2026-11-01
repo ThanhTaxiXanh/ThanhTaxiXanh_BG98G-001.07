@@ -72,6 +72,10 @@ class BRouterServiceClient(context: Context) {
                             putString("trackFormat", "json")
                             putString("timode", "9")
                             putString("maxRunningTime", "45")
+                            putString(
+                                "extraParams",
+                                request.preferences.brouterExtraParams()
+                            )
                             request.headingDegrees
                                 ?.takeIf { it.isFinite() }
                                 ?.let {
