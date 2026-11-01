@@ -93,9 +93,14 @@ class NavigationVoiceAnnouncer(context: Context) : TextToSpeech.OnInitListener {
                 }
                 overspeedActive = true
             } else {
-                val resetAt = (state.limit ?: Int.MAX_VALUE) +
-                    toleranceKmh.coerceIn(0, 20) - 2
-                if (speedKmh <= resetAt) overspeedActive = false
+                val limit = state.limit
+                if (limit == null) {
+                    overspeedActive = false
+                } else {
+                    val resetAt = limit +
+                        toleranceKmh.coerceIn(0, 20) - 2
+                    if (speedKmh <= resetAt) overspeedActive = false
+                }
             }
         } else {
             overspeedActive = false
