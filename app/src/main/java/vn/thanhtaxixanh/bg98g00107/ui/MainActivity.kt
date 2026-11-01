@@ -436,6 +436,84 @@ class MainActivity : Activity() {
         ) { v, checked -> v.copy(voiceCameraWarnings = checked) }
 
         toggle(
+            "Cảnh báo camera tốc độ",
+            current.warnSpeedCameras
+        ) { v, checked -> v.copy(warnSpeedCameras = checked) }
+        toggle(
+            "Cảnh báo camera đèn đỏ",
+            current.warnRedLightCameras
+        ) { v, checked -> v.copy(warnRedLightCameras = checked) }
+
+        fun cameraDistanceSlider(
+            title: String,
+            minValue: Int,
+            maxValue: Int,
+            initial: Int,
+            update: (DashboardSettings, Int) -> DashboardSettings
+        ) {
+            val distanceLabel = TextView(this).apply {
+                textSize = 15f
+            }
+            fun render(value: Int) {
+                distanceLabel.text = "$title: $value m"
+            }
+            render(initial)
+            root.addView(distanceLabel)
+            val distanceBar = SeekBar(this).apply {
+                max = maxValue - minValue
+                progress = initial - minValue
+            }
+            distanceBar.setOnSeekBarChangeListener(
+                object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(
+                        seekBar: SeekBar?,
+                        progress: Int,
+                        fromUser: Boolean
+                    ) {
+                        render(minValue + progress)
+                    }
+
+                    override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+                    override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                        val selected = minValue + (seekBar?.progress ?: 0)
+                        runCatching {
+                            settingsRepository.change { latest ->
+                                update(latest, selected)
+                            }
+                        }.onFailure {
+                            logErr("MainActivity:cameraDistance", it)
+                        }
+                    }
+                }
+            )
+            root.addView(distanceBar)
+        }
+
+        cameraDistanceSlider(
+            "Cảnh báo camera từ xa",
+            200, 1200,
+            current.cameraFarWarningM
+        ) { v, value -> v.copy(cameraFarWarningM = value) }
+        cameraDistanceSlider(
+            "Cảnh báo camera gần",
+            80, 500,
+            current.cameraNearWarningM
+        ) { v, value -> v.copy(cameraNearWarningM = value) }
+        cameraDistanceSlider(
+            "Cảnh báo camera sát",
+            30, 150,
+            current.cameraFinalWarningM
+        ) { v, value -> v.copy(cameraFinalWarningM = value) }
+
+        root.addView(TextView(this).apply {
+            text = "Ba mốc được tự chuẩn hóa theo thứ tự xa > gần > sát. " +
+                "Camera chỉ được đọc sau khi đã qua bộ lọc hướng/tuyến; " +
+                "camera ở đường song song sẽ bị loại khi không khớp tuyến."
+            textSize = 13f
+        })
+
+        toggle(
             "Hiển thị hướng dẫn làn giao thông",
             current.showLaneGuidance
         ) { v, checked -> v.copy(showLaneGuidance = checked) }

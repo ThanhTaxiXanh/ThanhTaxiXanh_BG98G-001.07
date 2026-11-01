@@ -1155,7 +1155,8 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                 headingDegrees = tHeading,
                 moving = moving,
                 accuracyM = lastAccuracyM,
-                markers = regionMarkers
+                markers = regionMarkers,
+                maxLookaheadM = cameraSettings.cameraFarWarningM
             )
             val mergedWarnings = ArrayList<vn.thanhtaxixanh.bg98g00107.signs.UpcomingSign>()
             mergedWarnings.addAll(baseState.upcoming)

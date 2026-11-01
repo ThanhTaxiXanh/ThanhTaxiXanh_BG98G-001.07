@@ -45,6 +45,25 @@ class DashboardSettingsTest {
         }
     }
 
+    @Test fun phase55CameraWarningSettingsRoundTrip() {
+        val settings = DashboardSettings(
+            warnSpeedCameras = false,
+            warnRedLightCameras = true,
+            cameraFarWarningM = 950,
+            cameraNearWarningM = 260,
+            cameraFinalWarningM = 90
+        )
+        val restored = DashboardSettingsCodec.read(
+            DashboardSettingsCodec.encode(settings),
+            false
+        )
+        assertEquals(false, restored.warnSpeedCameras)
+        assertEquals(true, restored.warnRedLightCameras)
+        assertEquals(950, restored.cameraFarWarningM)
+        assertEquals(260, restored.cameraNearWarningM)
+        assertEquals(90, restored.cameraFinalWarningM)
+    }
+
     @Test fun phase53MapAndRerouteSettingsRoundTrip() {
         val settings = DashboardSettings(
             autoZoomReferenceMeters = 320,

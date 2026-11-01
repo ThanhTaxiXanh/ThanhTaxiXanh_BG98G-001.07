@@ -212,13 +212,18 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
                 now
             )
             voiceAnnouncer.onTraffic(
-                maps.signsState,
-                speedKmh ?: 0,
-                currentSettings.speedWarningToleranceKmh,
-                currentSettings.voiceSpeedWarnings,
-                currentSettings.voiceCameraWarnings,
-                currentSettings.announceSpeedLimitChanges,
-                now
+                state = maps.signsState,
+                speedKmh = speedKmh ?: 0,
+                toleranceKmh = currentSettings.speedWarningToleranceKmh,
+                speedWarnings = currentSettings.voiceSpeedWarnings,
+                cameraWarnings = currentSettings.voiceCameraWarnings,
+                announceLimitChanges = currentSettings.announceSpeedLimitChanges,
+                cameraFarWarningM = currentSettings.cameraFarWarningM,
+                cameraNearWarningM = currentSettings.cameraNearWarningM,
+                cameraFinalWarningM = currentSettings.cameraFinalWarningM,
+                warnSpeedCameras = currentSettings.warnSpeedCameras,
+                warnRedLightCameras = currentSettings.warnRedLightCameras,
+                nowMs = now
             )
             maybeReroute(location)
         }
