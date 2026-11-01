@@ -47,6 +47,8 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RadioButton
@@ -58,6 +60,11 @@ import android.widget.Toast
 import java.io.File
 
 class MainActivity : Activity() {
+    companion object {
+        const val EXTRA_MODULE = "phone_config_module"
+        const val MODULE_BROUTER = "brouter"
+        private const val BROUTER_PACKAGE = "btools.routingapp"
+    }
     private val reqPick = 2
     private val reqLocation = 1
     private val reqReportExport = 3
@@ -85,6 +92,7 @@ class MainActivity : Activity() {
     private lateinit var preview: ImageView
     private lateinit var eventBox: LinearLayout
     private lateinit var reportBox: LinearLayout
+    private var brouterStatus: TextView? = null
     private val reportStore by lazy {
         TrafficReportStore(File(filesDir, "traffic_reports_v1.json"))
     }
@@ -94,34 +102,109 @@ class MainActivity : Activity() {
         val density = resources.displayMetrics.density
         pad = (20 * density).toInt()
 
-        val root = LinearLayout(this).apply {
+        val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad * 2, pad, pad)
+            setBackgroundColor(android.graphics.Color.rgb(10, 17, 29))
         }
-        val title = TextView(this).apply {
-            text = "AA Taxi Driver"
-            textSize = 22f
+
+        val header = TextView(this).apply {
+            text = "TTX AALauncher · Trung tâm cấu hình"
+            textSize = 20f
+            setTextColor(android.graphics.Color.WHITE)
+            setPadding(pad, pad, pad, (8 * density).toInt())
         }
+        page.addView(header)
+
+        val tabRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding((6 * density).toInt(), 0, (6 * density).toInt(),
+                (6 * density).toInt())
+        }
+        val tabStrip = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(tabRow)
+        }
+        page.addView(tabStrip)
+
+        val host = FrameLayout(this)
+        page.addView(
+            host,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+        )
+
+        data class Module(
+            val key: String,
+            val title: String,
+            val scroll: ScrollView,
+            val body: LinearLayout
+        )
+
+        fun module(key: String, title: String): Module {
+            val body = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(pad, (10 * density).toInt(), pad, pad)
+            }
+            val scroll = ScrollView(this).apply {
+                visibility = View.GONE
+                addView(body)
+            }
+            host.addView(
+                scroll,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            )
+            return Module(key, title, scroll, body)
+        }
+
+        val overview = module("overview", "Tổng quan")
+        val dashboard = module("dashboard", "Dashboard")
+        val brouter = module("brouter", "BRouter")
+        val qr = module("qr", "QR")
+        val media = module("media", "Media")
+        val calendar = module("calendar", "Lịch")
+        val traffic = module("traffic", "Giao thông")
+        val modules = listOf(
+            overview, dashboard, brouter, qr, media, calendar, traffic
+        )
+
+        // ---------- Tổng quan ----------
+        overview.body.addView(TextView(this).apply {
+            text = "Điều khiển và kiểm tra nhanh"
+            textSize = 20f
+            setTextColor(android.graphics.Color.WHITE)
+        })
         preview = ImageView(this).apply {
             adjustViewBounds = true
             maxHeight = (240 * density).toInt()
             scaleType = ImageView.ScaleType.FIT_CENTER
         }
-        val pick = Button(this).apply {
-            text = "Chọn ảnh mã QR từ điện thoại"
+        overview.body.addView(preview)
+        overview.body.addView(Button(this).apply {
+            text = "Mở Dashboard đa ô trên điện thoại"
+            isAllCaps = false
             setOnClickListener {
-                val i = Intent(Intent.ACTION_GET_CONTENT).apply {
-                    type = "image/*"
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                }
-                this@MainActivity.startActivityForResult(i, reqPick)
+                startActivity(
+                    Intent(this@MainActivity, PhoneDashboardActivity::class.java)
+                )
             }
-        }
-        val perm = Button(this).apply {
-            text = "Cấp quyền vị trí (đo tốc độ)"
+        })
+        overview.body.addView(TextView(this).apply {
+            text = "Dashboard điện thoại dùng để xem thử bố cục và trạng thái. " +
+                "Không chỉnh cấu hình khi đang lái xe."
+            textSize = 13f
+            setTextColor(android.graphics.Color.LTGRAY)
+        })
+        overview.body.addView(Button(this).apply {
+            text = "Cấp quyền vị trí chính xác (GPS)"
+            isAllCaps = false
             setOnClickListener {
-                // Android 12+ bắt buộc xin FINE cùng COARSE trong một yêu cầu, nếu không hệ thống bỏ qua.
-                this@MainActivity.requestPermissions(
+                requestPermissions(
                     arrayOf(
                         Manifest.permission.ACCESS_FINE_LOCATION,
                         Manifest.permission.ACCESS_COARSE_LOCATION
@@ -129,89 +212,270 @@ class MainActivity : Activity() {
                     reqLocation
                 )
             }
-        }
-        val evTitle = TextView(this).apply {
-            text = "Sự kiện hiển thị trên widget Lịch"
-            textSize = 18f
-            setPadding(0, pad, 0, 0)
-        }
-        eventBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val addEv = Button(this).apply {
-            text = "Thêm sự kiện"
-            setOnClickListener { this@MainActivity.showAddDialog() }
-        }
+        })
 
-        root.addView(title)
-        root.addView(preview)
-        root.addView(Button(this).apply {
-            text = "Mở Custom Dashboard đa ô (điện thoại)"
+        // ---------- Dashboard / bản đồ ----------
+        addDashboardSettings(dashboard.body)
+
+        // ---------- BRouter ----------
+        addBRouterModule(brouter.body)
+
+        // ---------- QR ----------
+        qr.body.addView(TextView(this).apply {
+            text = "Mã QR thanh toán"
+            textSize = 20f
+            setTextColor(android.graphics.Color.WHITE)
+        })
+        qr.body.addView(Button(this).apply {
+            text = "Chọn ảnh mã QR từ điện thoại"
+            isAllCaps = false
             setOnClickListener {
-                startActivity(Intent(this@MainActivity, PhoneDashboardActivity::class.java))
+                val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                    type = "image/*"
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                }
+                startActivityForResult(intent, reqPick)
             }
         })
-        root.addView(TextView(this).apply {
-            text = "Dashboard tùy chỉnh chỉ chạy trên điện thoại Android. " +
-                "Nếu đang lái xe, không chỉnh sửa bố cục hoặc chạm màn hình."
-            textSize = 13f
+        qrBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        qr.body.addView(qrBox)
+
+        // ---------- Media ----------
+        addMediaControls(media.body)
+
+        // ---------- Lịch ----------
+        calendar.body.addView(TextView(this).apply {
+            text = "Lịch Âm/Dương và sự kiện"
+            textSize = 20f
+            setTextColor(android.graphics.Color.WHITE)
         })
-        root.addView(pick)
-        qrBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(qrBox)
-        addMediaControls(root)
-        root.addView(perm)
-        addDashboardSettings(root)
-        root.addView(evTitle)
         val today = java.time.LocalDate.now()
         val lunarToday = LunarCalendar.solarToLunar(
             today.dayOfMonth, today.monthValue, today.year
         )
-        root.addView(TextView(this).apply {
+        calendar.body.addView(TextView(this).apply {
             text = "Hôm nay ${today.dayOfMonth}/${today.monthValue}/${today.year} (DL) · " +
                 "${lunarToday.day}/${lunarToday.month}/${lunarToday.year} (ÂL)" +
                 (if (lunarToday.leap) " · tháng nhuận" else "") +
-                "\nNăm ${LunarCalendar.canChi(lunarToday.year)} · múi giờ tính Âm lịch UTC+7"
+                "\nNăm ${LunarCalendar.canChi(lunarToday.year)} · UTC+7"
             textSize = 14f
+            setTextColor(android.graphics.Color.LTGRAY)
         })
-        root.addView(eventBox)
-        root.addView(addEv)
-        addReminderControls(root)
-        val reportsTitle = TextView(this).apply {
-            text = "Báo cáo giao thông (lưu offline trên điện thoại)"
-            textSize = 18f
-            setPadding(0, pad, 0, 0)
+        eventBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
         }
-        reportBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val addReport = Button(this).apply {
+        calendar.body.addView(eventBox)
+        calendar.body.addView(Button(this).apply {
+            text = "Thêm sự kiện"
+            isAllCaps = false
+            setOnClickListener { this@MainActivity.showAddDialog() }
+        })
+        addReminderControls(calendar.body)
+
+        // ---------- Giao thông / dữ liệu OSM ----------
+        traffic.body.addView(TextView(this).apply {
+            text = "Giao thông và dữ liệu OSM"
+            textSize = 20f
+            setTextColor(android.graphics.Color.WHITE)
+        })
+        traffic.body.addView(TextView(this).apply {
+            text = "Báo cáo cá nhân được lưu offline; dữ liệu OSM nhập thủ công " +
+                "được giữ tách biệt với giới hạn tốc độ xác minh."
+            textSize = 13f
+            setTextColor(android.graphics.Color.LTGRAY)
+        })
+        reportBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        traffic.body.addView(reportBox)
+        traffic.body.addView(Button(this).apply {
             text = "Tạo báo cáo giao thông"
+            isAllCaps = false
             setOnClickListener { this@MainActivity.showReportDialog() }
-        }
-        root.addView(reportsTitle)
-        root.addView(reportBox)
-        root.addView(addReport)
-        addRegionImportControls(root)
-        val exportReports = Button(this).apply {
+        })
+        addRegionImportControls(traffic.body)
+        traffic.body.addView(Button(this).apply {
             text = "Xuất báo cáo JSON"
+            isAllCaps = false
             setOnClickListener { showExportDialog() }
-        }
-        val eraseGps = Button(this).apply {
+        })
+        traffic.body.addView(Button(this).apply {
             text = "Xóa toàn bộ GPS khỏi báo cáo"
+            isAllCaps = false
             setOnClickListener { confirmEraseGps() }
+        })
+
+        val tabButtons = ArrayList<Button>()
+        fun selectModule(index: Int) {
+            modules.forEachIndexed { i, module ->
+                module.scroll.visibility =
+                    if (i == index) View.VISIBLE else View.GONE
+            }
+            tabButtons.forEachIndexed { i, button ->
+                val selected = i == index
+                button.isEnabled = !selected
+                button.alpha = if (selected) 1f else 0.78f
+                button.setBackgroundColor(
+                    if (selected) android.graphics.Color.rgb(37, 99, 235)
+                    else android.graphics.Color.rgb(36, 45, 61)
+                )
+            }
+            if (modules[index].key == "brouter") refreshBRouterStatus()
         }
-        root.addView(exportReports)
-        root.addView(eraseGps)
-        val scroll = ScrollView(this)
-        scroll.addView(root)
-        setContentView(scroll)
+
+        for ((index, module) in modules.withIndex()) {
+            val button = Button(this).apply {
+                text = module.title
+                isAllCaps = false
+                setTextColor(android.graphics.Color.WHITE)
+                setPadding(
+                    (14 * density).toInt(),
+                    (6 * density).toInt(),
+                    (14 * density).toInt(),
+                    (6 * density).toInt()
+                )
+                setOnClickListener { selectModule(index) }
+            }
+            tabButtons.add(button)
+            tabRow.addView(button)
+        }
+
+        setContentView(page)
 
         refreshPreview()
         refreshQrList()
         refreshEvents()
         refreshReports()
+        refreshRegionInfo()
+        refreshBRouterStatus()
         try {
             EventReminderScheduler.refresh(this)
         } catch (e: Exception) {
             logErr("MainActivity:reminderRefresh", e)
         }
+
+        val requestedModule = intent.getStringExtra(EXTRA_MODULE)
+        val initialIndex = modules.indexOfFirst { it.key == requestedModule }
+            .takeIf { it >= 0 } ?: 0
+        selectModule(initialIndex)
+    }
+
+    private fun addBRouterModule(root: LinearLayout) {
+        root.addView(TextView(this).apply {
+            text = "BRouter · định tuyến offline"
+            textSize = 20f
+            setTextColor(android.graphics.Color.WHITE)
+        })
+        root.addView(TextView(this).apply {
+            text = "TTX AALauncher gọi BRouter qua service btools.routingapp.BRouterService. " +
+                "BRouter phải được cài riêng và cần tải dữ liệu RD5 trước khi tính tuyến."
+            textSize = 13f
+            setTextColor(android.graphics.Color.LTGRAY)
+        })
+        brouterStatus = TextView(this).apply {
+            textSize = 15f
+            setPadding(0, pad / 2, 0, pad / 2)
+            setTextColor(android.graphics.Color.WHITE)
+        }
+        root.addView(requireNotNull(brouterStatus))
+
+        root.addView(Button(this).apply {
+            text = "Cài / cập nhật BRouter từ F-Droid"
+            isAllCaps = false
+            setOnClickListener {
+                openExternal(
+                    "https://f-droid.org/packages/btools.routingapp/"
+                )
+            }
+        })
+        root.addView(Button(this).apply {
+            text = "Mở BRouter · tải dữ liệu RD5"
+            isAllCaps = false
+            setOnClickListener {
+                val launch = packageManager
+                    .getLaunchIntentForPackage(BROUTER_PACKAGE)
+                if (launch == null) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Chưa cài BRouter. Hãy cài từ F-Droid trước.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    startActivity(launch)
+                }
+            }
+        })
+        root.addView(Button(this).apply {
+            text = "Kiểm tra lại BRouter"
+            isAllCaps = false
+            setOnClickListener { refreshBRouterStatus() }
+        })
+        root.addView(TextView(this).apply {
+            text = "Tải RD5 trong BRouter: mở Download Manager → phóng to bản đồ → " +
+                "chọn khu vực cần chạy → Start Download. Bắc Ninh/Bắc Giang nằm " +
+                "trong ô E105_N20. Nếu cần toàn Việt Nam, chọn toàn bộ lãnh thổ " +
+                "trên bản đồ tải xuống."
+            textSize = 14f
+            setTextColor(android.graphics.Color.LTGRAY)
+            setPadding(0, pad / 2, 0, 0)
+        })
+    }
+
+    private fun refreshBRouterStatus() {
+        val view = brouterStatus ?: return
+        val service = Intent().setComponent(
+            ComponentName(
+                BROUTER_PACKAGE,
+                "btools.routingapp.BRouterService"
+            )
+        )
+        val installed = runCatching {
+            packageManager.getPackageInfo(BROUTER_PACKAGE, 0)
+        }.isSuccess
+        val serviceReady = packageManager.resolveService(service, 0) != null
+        val version = if (installed) runCatching {
+            packageManager.getPackageInfo(BROUTER_PACKAGE, 0).versionName
+        }.getOrNull() else null
+
+        view.text = when {
+            !installed ->
+                "● Chưa cài BRouter\nCần cài ứng dụng trước khi TTX có thể tìm tuyến."
+            !serviceReady ->
+                "● Đã cài BRouter" +
+                    (version?.let { " · v$it" } ?: "") +
+                    "\nChưa thấy BRouterService. Hãy mở BRouter một lần và kiểm tra cài đặt."
+            else ->
+                "● BRouter sẵn sàng" +
+                    (version?.let { " · v$it" } ?: "") +
+                    "\nBước tiếp theo: bảo đảm đã tải RD5 cho khu vực cần di chuyển."
+        }
+        view.setTextColor(
+            when {
+                !installed -> android.graphics.Color.rgb(255, 160, 80)
+                !serviceReady -> android.graphics.Color.rgb(255, 210, 90)
+                else -> android.graphics.Color.rgb(105, 220, 140)
+            }
+        )
+    }
+
+    private fun openExternal(url: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (e: Exception) {
+            logErr("MainActivity:openExternal", e)
+            Toast.makeText(
+                this,
+                "Không mở được trình duyệt.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshBRouterStatus()
     }
 
     // ---------- Phase 5: centralized phone configuration ----------
