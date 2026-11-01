@@ -62,12 +62,26 @@ internal class AiCameraImporter(private val context: Context) {
                     val item=AiObservation(
                         kind=AiEvidenceKind.SIGN_DETECTION,
                         label=det.label, confidence=det.confidence,
-                        proposedSpeedKph=null,videoOffsetMs=offset,
+                        proposedSpeedKph=AiObservationRules.speedFromLabel(det.label),
+                        videoOffsetMs=offset,
                         source=if (offset==null) "70mai_image" else "70mai_video")
                     val evidence=File(dir,"evidence").apply { mkdirs() }
-                    val width=min(960,frame.width)
-                    val height=max(1,frame.height*width/frame.width)
-                    val thumb=Bitmap.createScaledBitmap(frame,width,height,true)
+                    // Crop the sign box with margin, rather than shrinking the whole
+                    // A500S frame: digits remain legible for human review.
+                    val size=640f
+                    val scale=size/max(frame.width,frame.height).toFloat()
+                    val padX=(size-frame.width*scale)/2f
+                    val padY=(size-frame.height*scale)/2f
+                    val x1=((det.left-padX)/scale).toInt().coerceIn(0,frame.width-1)
+                    val y1=((det.top-padY)/scale).toInt().coerceIn(0,frame.height-1)
+                    val x2=((det.right-padX)/scale).toInt().coerceIn(x1+1,frame.width)
+                    val y2=((det.bottom-padY)/scale).toInt().coerceIn(y1+1,frame.height)
+                    val margin=max(12,(x2-x1)/3)
+                    val left=(x1-margin).coerceAtLeast(0)
+                    val top=(y1-margin).coerceAtLeast(0)
+                    val right=(x2+margin).coerceAtMost(frame.width)
+                    val bottom=(y2+margin).coerceAtMost(frame.height)
+                    val thumb=Bitmap.createBitmap(frame,left,top,right-left,bottom-top)
                     File(evidence,item.id+".jpg").outputStream().use {
                         thumb.compress(Bitmap.CompressFormat.JPEG,82,it)
                     }

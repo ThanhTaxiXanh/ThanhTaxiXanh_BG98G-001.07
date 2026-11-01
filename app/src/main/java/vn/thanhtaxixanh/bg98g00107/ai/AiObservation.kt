@@ -44,6 +44,9 @@ internal data class AiObservation(
 
 internal object AiObservationRules {
     val SPEEDS = listOf(20,30,40,50,60,70,80,90,100,110,120)
+    private val SPEED_SIGN = Regex("(?i)^(?:P[.\\-]?127\\*|speed[_ ]?limit[_ :]*)(20|30|40|50|60|70|80|90|100|110|120)(?:\\s*km/?h)?$")
+    fun speedFromLabel(label: String): Int? =
+        SPEED_SIGN.matchEntire(label.trim())?.groupValues?.get(1)?.toIntOrNull()
     fun approvedSpeed(observation: AiObservation): Int? =
         observation.proposedSpeedKph?.takeIf {
             observation.isSpeedPoint() && it in SPEEDS
