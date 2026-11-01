@@ -15,6 +15,7 @@ import vn.thanhtaxixanh.bg98g00107.navigation.RoutePlanStore
 import vn.thanhtaxixanh.bg98g00107.navigation.RoutePoint
 import vn.thanhtaxixanh.bg98g00107.navigation.RouteRequest
 import vn.thanhtaxixanh.bg98g00107.signs.SignsState
+import vn.thanhtaxixanh.bg98g00107.trips.TripRecorder
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -197,6 +198,7 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
                 else (location.speed * 3.6f).roundToInt()
             } else null
             maps.onLocation(location)
+            tripRecorder.onLocation(location, currentSettings.recordTrips)
             voiceAnnouncer.onGuidance(
                 maps.guidanceState,
                 speedKmh ?: 0,
@@ -245,6 +247,7 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
                     rerouteClient?.close()
                     rerouteClient = null
                     voiceAnnouncer.shutdown()
+                    tripRecorder.close()
                     maps.dispose()
                     surface?.release()
                     surface = null

@@ -12,6 +12,7 @@ import vn.thanhtaxixanh.bg98g00107.navigation.RoutePoint
 import vn.thanhtaxixanh.bg98g00107.navigation.RouteRequest
 import vn.thanhtaxixanh.bg98g00107.signs.SignsState
 import vn.thanhtaxixanh.bg98g00107.ui.MainActivity
+import vn.thanhtaxixanh.bg98g00107.trips.TripRecorder
 
 import android.Manifest
 import android.app.Activity
@@ -62,6 +63,7 @@ class PhoneDashboardActivity : Activity() {
     private val routeClient by lazy { BRouterServiceClient(applicationContext) }
     private val destinationSearch by lazy { DestinationSearch(applicationContext) }
     private val routeStore by lazy { RoutePlanStore(applicationContext) }
+    private val tripRecorder by lazy { TripRecorder(applicationContext) }
     private val lifetime = PhoneDashboardLifecycle()
     private lateinit var view: DashboardCanvasView
     private lateinit var status: TextView
@@ -96,6 +98,7 @@ class PhoneDashboardActivity : Activity() {
                 else (location.speed * 3.6f).roundToInt()
             } else null
             maps.onLocation(location)
+            tripRecorder.onLocation(location, settings.recordTrips)
             view.postInvalidateOnAnimation()
         }
     }
@@ -232,6 +235,7 @@ class PhoneDashboardActivity : Activity() {
         handler.removeCallbacks(ticker)
         destinationSearch.close()
         routeClient.close()
+        tripRecorder.close()
         maps.dispose()
         super.onDestroy()
     }
