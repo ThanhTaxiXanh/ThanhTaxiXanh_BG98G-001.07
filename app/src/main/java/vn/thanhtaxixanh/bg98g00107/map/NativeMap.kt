@@ -1164,8 +1164,20 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             }
             main.post {
                 if (requestId != offlineRoadRequestId) return@post
-                offlineRoadContext = roads
                 offlineRoadLoading = false
+                if (!vn.thanhtaxixanh.bg98g00107.signs.RoadContextRefreshPolicy.covers(
+                        tLat, tLon, plan
+                    )
+                ) {
+                    // The car moved beyond this query while SQLite was busy.
+                    // Discard rather than briefly matching against stale roads.
+                    offlineRoadContext = emptyList()
+                    lastOfflineRoadFetchMs = -1L
+                    lastOfflineRoadLat = Double.NaN
+                    lastOfflineRoadLon = Double.NaN
+                    return@post
+                }
+                offlineRoadContext = roads
             }
         }
     }

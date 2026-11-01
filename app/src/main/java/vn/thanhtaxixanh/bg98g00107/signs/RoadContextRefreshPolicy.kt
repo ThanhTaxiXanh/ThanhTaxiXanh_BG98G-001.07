@@ -86,6 +86,18 @@ internal object RoadContextRefreshPolicy {
         ) >= plan.refreshDistanceM
     }
 
+    fun covers(
+        lat: Double,
+        lon: Double,
+        plan: RoadContextQueryPlan,
+        safetyMarginM: Double = 35.0
+    ): Boolean {
+        if (!lat.isFinite() || !lon.isFinite() ||
+            !safetyMarginM.isFinite() || safetyMarginM < 0.0) return false
+        val usableRadius = (plan.radiusM - safetyMarginM).coerceAtLeast(25.0)
+        return distanceM(lat, lon, plan.centerLat, plan.centerLon) <= usableRadius
+    }
+
     internal fun distanceM(
         lat1: Double,
         lon1: Double,

@@ -34,6 +34,12 @@ class RoadContextRefreshPolicyTest {
         ))
     }
 
+    @Test fun staleBackgroundResultOutsideSafeCoverageIsRejected() {
+        val p = RoadContextRefreshPolicy.plan(0.0, 0.0, 90.0, true, 20.0)
+        assertTrue(RoadContextRefreshPolicy.covers(0.0, 0.0, p))
+        assertFalse(RoadContextRefreshPolicy.covers(0.0, 0.003, p))
+    }
+
     @Test fun emptyContextRetriesWithoutHammeringDatabase() {
         val p = RoadContextRefreshPolicy.plan(21.0, 106.0, 0.0, false, 0.0)
         assertFalse(RoadContextRefreshPolicy.shouldRefresh(
