@@ -1,5 +1,6 @@
 package vn.thanhtaxixanh.bg98g00107.ui
 
+import vn.thanhtaxixanh.bg98g00107.ai.AiCameraActivity
 import vn.thanhtaxixanh.bg98g00107.calendar.CalEvent
 import vn.thanhtaxixanh.bg98g00107.calendar.EventReminderScheduler
 import vn.thanhtaxixanh.bg98g00107.calendar.EventReminderSettings
@@ -179,8 +180,9 @@ class MainActivity : Activity() {
         val media = module("media", "Media")
         val calendar = module("calendar", "Lịch")
         val traffic = module("traffic", "Giao thông")
+        val aiCamera = module("ai_camera", "AI Camera")
         val modules = listOf(
-            overview, dashboard, mapSettings, trips, warnings, brouter, qr, media, calendar, traffic
+            overview, dashboard, mapSettings, trips, warnings, brouter, aiCamera, qr, media, calendar, traffic
         )
 
         // ---------- Tổng quan ----------
@@ -292,6 +294,25 @@ class MainActivity : Activity() {
             setOnClickListener { this@MainActivity.showAddDialog() }
         })
         addReminderControls(calendar.body)
+
+        // ---------- TTX AI Camera ----------
+        aiCamera.body.addView(TextView(this).apply {
+            text = "AI Camera: biển báo và ghi nhận loại đường (duyệt trước khi dùng)"
+            textSize = 17f
+            setTextColor(android.graphics.Color.rgb(24,34,48))
+        })
+        aiCamera.body.addView(TextView(this).apply {
+            text = "Nhập video/ảnh từ 70mai, nạp YOLOv8 ONNX, xem bằng chứng và duyệt dữ liệu cá nhân. " +
+                "Không suy ra tốc độ pháp lý chỉ từ số làn. Không cấu hình khi xe đang chạy."
+            textSize = 13f
+        })
+        aiCamera.body.addView(Button(this).apply {
+            text = "Mở TTX AI Camera"
+            isAllCaps = false
+            setOnClickListener {
+                startActivity(Intent(this@MainActivity, AiCameraActivity::class.java))
+            }
+        })
 
         // ---------- Giao thông / dữ liệu OSM ----------
         traffic.body.addView(TextView(this).apply {

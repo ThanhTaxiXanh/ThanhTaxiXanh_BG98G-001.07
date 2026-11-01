@@ -47,6 +47,10 @@
             android:screenOrientation="sensorLandscape" />
 
         <activity
+            android:name=".ai.AiCameraActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".ui.MainActivity"
             android:exported="true">
             <intent-filter>
