@@ -728,7 +728,8 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         if (smKmh.isNaN()) smKmh = 0.0
         dZoom = DrivingCameraPolicy.target(
             smKmh,
-            cameraSettings.cameraLookAheadSeconds
+            cameraSettings.cameraLookAheadSeconds,
+            cameraSettings.autoZoomReferenceMeters
         ).zoom
         val m = map ?: return
         m.moveCamera(
@@ -896,7 +897,8 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                 filteredGpsLat,
                 filteredGpsLon,
                 headingDegrees = tHeading.takeIf { moving && it.isFinite() },
-                accuracyM = lastAccuracyM.takeIf { it.isFinite() }
+                accuracyM = lastAccuracyM.takeIf { it.isFinite() },
+                offRouteThresholdM = cameraSettings.rerouteDeviationM.toDouble()
             )
         } else {
             RouteGuidanceState.EMPTY
@@ -1003,7 +1005,8 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         smKmh += ((if (moving) speedMs * 3.6 else 0.0) - smKmh) * (1.0 - exp(-dt / 1.5))
         val cameraTarget = DrivingCameraPolicy.target(
             smKmh,
-            cameraSettings.cameraLookAheadSeconds
+            cameraSettings.cameraLookAheadSeconds,
+            cameraSettings.autoZoomReferenceMeters
         )
         val targetZoom = cameraController.temporaryZoom(now)
             ?: if (cameraSettings.autoZoomBySpeed) cameraTarget.zoom else dZoom
@@ -1056,6 +1059,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         refreshPersistedRoute()
         cameraSettings = runCatching { settingsStore.read() }
             .getOrDefault(cameraSettings)
+        applyConfiguredLineColors()
         val lat = if (hasFix) tLat else 21.0285
         val lon = if (hasFix) tLon else 105.8542
         val el = sunElevation(lat, lon, nowMs)
@@ -1604,6 +1608,22 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             logErr("NativeMap:routeStore", e)
         }
     }
+    private fun applyConfiguredLineColors() {
+        val style = map?.style ?: return
+        try {
+            style.getLayerAs<LineLayer>("ct-active-route-line")
+                ?.setProperties(
+                    PropertyFactory.lineColor(cameraSettings.routeLineColor.hex)
+                )
+            style.getLayerAs<LineLayer>("ct-current-trip-line")
+                ?.setProperties(
+                    PropertyFactory.lineColor(cameraSettings.tripLineColor.hex)
+                )
+        } catch (e: Exception) {
+            logErr("NativeMap:lineColors", e)
+        }
+    }
+
 
     private fun installRoute(style: Style) {
         try {
@@ -1627,7 +1647,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             )
             style.addLayer(
                 LineLayer("ct-active-route-line", routeSrc).withProperties(
-                    PropertyFactory.lineColor("#16c94f"),
+                    PropertyFactory.lineColor(cameraSettings.routeLineColor.hex),
                     PropertyFactory.lineWidth(
                         Expression.interpolate(
                             Expression.linear(),
@@ -1667,7 +1687,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             style.addSource(GeoJsonSource(currentTripSrc))
             style.addLayer(
                 LineLayer("ct-current-trip-line", currentTripSrc).withProperties(
-                    PropertyFactory.lineColor("#00b8ff"),
+                    PropertyFactory.lineColor(cameraSettings.tripLineColor.hex),
                     PropertyFactory.lineWidth(
                         Expression.interpolate(
                             Expression.linear(),
