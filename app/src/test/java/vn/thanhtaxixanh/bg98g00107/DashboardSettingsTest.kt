@@ -3,6 +3,7 @@ package vn.thanhtaxixanh.bg98g00107
 import vn.thanhtaxixanh.bg98g00107.dashboard.DashboardSettings
 import vn.thanhtaxixanh.bg98g00107.dashboard.DashboardSettingsCodec
 import vn.thanhtaxixanh.bg98g00107.dashboard.MapThemeMode
+import vn.thanhtaxixanh.bg98g00107.dashboard.MapLineColor
 
 import org.json.JSONObject
 import org.junit.Assert.*
@@ -42,6 +43,23 @@ class DashboardSettingsTest {
                 DashboardSettingsCodec.encode(settings), false
             ))
         }
+    }
+
+    @Test fun phase53MapAndRerouteSettingsRoundTrip() {
+        val settings = DashboardSettings(
+            autoZoomReferenceMeters = 320,
+            rerouteDeviationM = 65,
+            routeLineColor = MapLineColor.ORANGE,
+            tripLineColor = MapLineColor.MAGENTA
+        )
+        val restored = DashboardSettingsCodec.read(
+            DashboardSettingsCodec.encode(settings),
+            false
+        )
+        assertEquals(320, restored.autoZoomReferenceMeters)
+        assertEquals(65, restored.rerouteDeviationM)
+        assertEquals(MapLineColor.ORANGE, restored.routeLineColor)
+        assertEquals(MapLineColor.MAGENTA, restored.tripLineColor)
     }
 
     @Test fun partialVersionOnePayloadDefaultsMissingOptionalKeys() {

@@ -1011,7 +1011,7 @@ class MainActivity : Activity() {
             }
             render()
             button.setOnClickListener {
-                val all = MapLineColor.values()
+                val all = MapLineColor.entries
                 selected = all[(selected.ordinal + 1) % all.size]
                 render()
                 runCatching {
