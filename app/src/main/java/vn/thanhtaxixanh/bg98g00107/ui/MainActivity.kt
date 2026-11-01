@@ -448,6 +448,7 @@ class MainActivity : Activity() {
             title: String,
             minValue: Int,
             maxValue: Int,
+            step: Int,
             initial: Int,
             update: (DashboardSettings, Int) -> DashboardSettings
         ) {
@@ -459,9 +460,11 @@ class MainActivity : Activity() {
             }
             render(initial)
             root.addView(distanceLabel)
+            val safeStep = step.coerceAtLeast(1)
             val distanceBar = SeekBar(this).apply {
-                max = maxValue - minValue
-                progress = initial - minValue
+                max = (maxValue - minValue) / safeStep
+                progress = ((initial - minValue) / safeStep)
+                    .coerceIn(0, max)
             }
             distanceBar.setOnSeekBarChangeListener(
                 object : SeekBar.OnSeekBarChangeListener {
@@ -470,13 +473,14 @@ class MainActivity : Activity() {
                         progress: Int,
                         fromUser: Boolean
                     ) {
-                        render(minValue + progress)
+                        render(minValue + progress * safeStep)
                     }
 
                     override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
 
                     override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                        val selected = minValue + (seekBar?.progress ?: 0)
+                        val selected = minValue +
+                            (seekBar?.progress ?: 0) * safeStep
                         runCatching {
                             settingsRepository.change { latest ->
                                 update(latest, selected)
@@ -492,17 +496,17 @@ class MainActivity : Activity() {
 
         cameraDistanceSlider(
             "Cảnh báo camera từ xa",
-            200, 1200,
+            200, 1200, 50,
             current.cameraFarWarningM
         ) { v, value -> v.copy(cameraFarWarningM = value) }
         cameraDistanceSlider(
             "Cảnh báo camera gần",
-            80, 500,
+            80, 500, 10,
             current.cameraNearWarningM
         ) { v, value -> v.copy(cameraNearWarningM = value) }
         cameraDistanceSlider(
             "Cảnh báo camera sát",
-            30, 150,
+            30, 150, 10,
             current.cameraFinalWarningM
         ) { v, value -> v.copy(cameraFinalWarningM = value) }
 
