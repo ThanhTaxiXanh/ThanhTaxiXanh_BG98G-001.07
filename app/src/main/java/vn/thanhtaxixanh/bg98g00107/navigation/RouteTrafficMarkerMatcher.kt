@@ -54,7 +54,8 @@ internal class RouteTrafficMarkerMatcher {
         headingDegrees: Double,
         moving: Boolean,
         accuracyM: Double,
-        markers: List<RegionalOsmStore.Marker>
+        markers: List<RegionalOsmStore.Marker>,
+        maxLookaheadM: Int = 600
     ): List<UpcomingSign> {
         val plan = route ?: return emptyList()
         if (!moving || !headingDegrees.isFinite() ||
@@ -70,7 +71,8 @@ internal class RouteTrafficMarkerMatcher {
         if (angleDiff(current.bearing, headingDegrees) > 60.0) return emptyList()
         lastSegment = current.segment
 
-        val maxProgress = current.progressM + 650.0
+        val lookahead = maxLookaheadM.coerceIn(200, 1200).toDouble()
+        val maxProgress = current.progressM + lookahead + 50.0
         var endSegment = current.segment
         while (endSegment + 1 < plan.points.lastIndex &&
             cumulative[endSegment] <= maxProgress) {
@@ -83,7 +85,8 @@ internal class RouteTrafficMarkerMatcher {
         for (marker in markers) {
             if (marker.type != "camera" && marker.type != "redlight_camera") continue
             if (!seen.add(marker.osmId)) continue
-            if (localDistance(lat, lon, marker.lat, marker.lon) > 700.0) continue
+            if (localDistance(lat, lon, marker.lat, marker.lon) >
+                lookahead + 100.0) continue
 
             val projection = projectMarker(
                 plan, marker.lat, marker.lon, startSegment, endSegment
@@ -91,7 +94,7 @@ internal class RouteTrafficMarkerMatcher {
             if (projection.distanceM > 12.0) continue
 
             val along = projection.progressM - current.progressM
-            if (along !in 20.0..600.0) continue
+            if (along !in 20.0..lookahead) continue
 
             val nodeId = marker.osmId
                 .takeIf { it.startsWith("node/") }

@@ -31,17 +31,43 @@ object TrafficVoicePromptPolicy {
         )
     }
 
-    fun camera(state: SignsState): TrafficVoicePrompt? {
+    fun camera(
+        state: SignsState,
+        farDistanceM: Int = 600,
+        nearDistanceM: Int = 180,
+        finalDistanceM: Int = 70,
+        warnSpeedCameras: Boolean = true,
+        warnRedLightCameras: Boolean = true
+    ): TrafficVoicePrompt? {
+        val far = farDistanceM.coerceIn(200, 1200)
+        val near = nearDistanceM.coerceIn(80, 500)
+            .coerceAtMost((far - 50).coerceAtLeast(80))
+        val final = finalDistanceM.coerceIn(30, 150)
+            .coerceAtMost((near - 30).coerceAtLeast(30))
         val candidate = state.upcoming.asSequence()
-            .filter { it.item.type == "camera" || it.item.type == "redlight_camera" }
-            .filter { it.distM in 20..600 }
+            .filter {
+                (it.item.type == "camera" && warnSpeedCameras) ||
+                    (it.item.type == "redlight_camera" && warnRedLightCameras)
+            }
+            .filter { it.distM in 20..far }
             .minByOrNull { it.distM } ?: return null
-        val stage = if (candidate.distM <= 180) "near" else "far"
+        val stage = when {
+            candidate.distM <= final -> "final"
+            candidate.distM <= near -> "near"
+            else -> "far"
+        }
         val id = cameraIdentity(candidate)
-        val kind = if (candidate.item.type == "redlight_camera")
-            "Camera giám sát đèn đỏ" else "Camera tốc độ"
-        val text = if (stage == "near") "$kind phía trước."
-            else "$kind phía trước ${spokenDistance(candidate.distM)}."
+        val kind = if (candidate.item.type == "redlight_camera") {
+            "camera giám sát đèn đỏ"
+        } else {
+            "camera tốc độ"
+        }
+        val text = when (stage) {
+            "final" -> "Sắp tới $kind."
+            "near" -> "Còn ${spokenDistance(candidate.distM)} đến $kind."
+            else -> kind.replaceFirstChar { it.uppercase() } +
+                " phía trước ${spokenDistance(candidate.distM)}."
+        }
         return TrafficVoicePrompt("camera:$id:$stage", text)
     }
 

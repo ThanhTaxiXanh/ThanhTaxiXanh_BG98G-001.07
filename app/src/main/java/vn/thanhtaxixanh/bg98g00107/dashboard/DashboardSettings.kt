@@ -45,6 +45,11 @@ data class DashboardSettings(
     val tripLineColor: MapLineColor = MapLineColor.CYAN,
     val voiceSpeedWarnings: Boolean = true,
     val voiceCameraWarnings: Boolean = true,
+    val warnSpeedCameras: Boolean = true,
+    val warnRedLightCameras: Boolean = true,
+    val cameraFarWarningM: Int = 600,
+    val cameraNearWarningM: Int = 180,
+    val cameraFinalWarningM: Int = 70,
     val announceSpeedLimitChanges: Boolean = true,
     val showLaneGuidance: Boolean = true,
     /** Personal notes only, never authoritative traffic signs. */
@@ -69,6 +74,9 @@ data class DashboardSettings(
         require(cameraTiltDegrees in 0..70)
         require(autoRecenterSeconds in 5..60)
         require(speedWarningToleranceKmh in 0..20)
+        require(cameraFarWarningM in 200..1200)
+        require(cameraNearWarningM in 80..500)
+        require(cameraFinalWarningM in 30..150)
         require(rerouteDeviationM in 20..100)
     }
 }
@@ -129,6 +137,11 @@ internal object DashboardSettingsCodec {
             ),
             voiceSpeedWarnings = bool("voiceSpeedWarnings", true),
             voiceCameraWarnings = bool("voiceCameraWarnings", true),
+            warnSpeedCameras = bool("warnSpeedCameras", true),
+            warnRedLightCameras = bool("warnRedLightCameras", true),
+            cameraFarWarningM = int("cameraFarWarningM", 600, 200..1200),
+            cameraNearWarningM = int("cameraNearWarningM", 180, 80..500),
+            cameraFinalWarningM = int("cameraFinalWarningM", 70, 30..150),
             announceSpeedLimitChanges = bool("announceSpeedLimitChanges", true),
             showLaneGuidance = bool("showLaneGuidance", true),
             showPersonalReportsOnMap = bool("showPersonalReportsOnMap", false),
@@ -165,6 +178,11 @@ internal object DashboardSettingsCodec {
         .put("tripLineColor", value.tripLineColor.name)
         .put("voiceSpeedWarnings", value.voiceSpeedWarnings)
         .put("voiceCameraWarnings", value.voiceCameraWarnings)
+        .put("warnSpeedCameras", value.warnSpeedCameras)
+        .put("warnRedLightCameras", value.warnRedLightCameras)
+        .put("cameraFarWarningM", value.cameraFarWarningM)
+        .put("cameraNearWarningM", value.cameraNearWarningM)
+        .put("cameraFinalWarningM", value.cameraFinalWarningM)
         .put("announceSpeedLimitChanges", value.announceSpeedLimitChanges)
         .put("showLaneGuidance", value.showLaneGuidance)
         .put("showPersonalReportsOnMap", value.showPersonalReportsOnMap)

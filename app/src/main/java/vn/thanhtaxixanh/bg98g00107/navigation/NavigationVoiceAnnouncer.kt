@@ -65,6 +65,11 @@ class NavigationVoiceAnnouncer(context: Context) : TextToSpeech.OnInitListener {
         speedWarnings: Boolean,
         cameraWarnings: Boolean,
         announceLimitChanges: Boolean,
+        cameraFarWarningM: Int = 600,
+        cameraNearWarningM: Int = 180,
+        cameraFinalWarningM: Int = 70,
+        warnSpeedCameras: Boolean = true,
+        warnRedLightCameras: Boolean = true,
         nowMs: Long = SystemClock.uptimeMillis()
     ) {
         if (speedWarnings) {
@@ -107,7 +112,14 @@ class NavigationVoiceAnnouncer(context: Context) : TextToSpeech.OnInitListener {
         }
 
         if (cameraWarnings) {
-            TrafficVoicePromptPolicy.camera(state)?.let { prompt ->
+            TrafficVoicePromptPolicy.camera(
+                state = state,
+                farDistanceM = cameraFarWarningM,
+                nearDistanceM = cameraNearWarningM,
+                finalDistanceM = cameraFinalWarningM,
+                warnSpeedCameras = warnSpeedCameras,
+                warnRedLightCameras = warnRedLightCameras
+            )?.let { prompt ->
                 if (spokenCameraTokens.add(prompt.token)) {
                     speak(prompt.text, TextToSpeech.QUEUE_ADD)
                     while (spokenCameraTokens.size > 80) {
