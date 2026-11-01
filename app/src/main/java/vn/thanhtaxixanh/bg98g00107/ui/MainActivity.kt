@@ -171,13 +171,14 @@ class MainActivity : Activity() {
         val dashboard = module("dashboard", "Dashboard")
         val mapSettings = module("map", "Bản đồ")
         val trips = module("trips", "Chuyến đi")
+        val warnings = module("warnings", "Cảnh báo")
         val brouter = module("brouter", "BRouter")
         val qr = module("qr", "QR")
         val media = module("media", "Media")
         val calendar = module("calendar", "Lịch")
         val traffic = module("traffic", "Giao thông")
         val modules = listOf(
-            overview, dashboard, mapSettings, trips, brouter, qr, media, calendar, traffic
+            overview, dashboard, mapSettings, trips, warnings, brouter, qr, media, calendar, traffic
         )
 
         // ---------- Tổng quan ----------
@@ -229,6 +230,9 @@ class MainActivity : Activity() {
 
         // ---------- Chuyến đi ----------
         addTripModule(trips.body)
+
+        // ---------- Cảnh báo ----------
+        addWarningSettings(warnings.body)
 
         // ---------- BRouter ----------
         addBRouterModule(brouter.body)
@@ -299,40 +303,6 @@ class MainActivity : Activity() {
             textSize = 13f
             setTextColor(android.graphics.Color.rgb(80, 90, 105))
         })
-        val warningSettings = runCatching { settingsRepository.read() }
-            .getOrDefault(DashboardSettings())
-        fun warningToggle(
-            label: String,
-            selected: Boolean,
-            update: (DashboardSettings, Boolean) -> DashboardSettings
-        ) {
-            val box = CheckBox(this).apply {
-                text = label
-                isChecked = selected
-            }
-            box.setOnCheckedChangeListener { _, checked ->
-                runCatching {
-                    settingsRepository.change { latest ->
-                        update(latest, checked)
-                    }
-                }.onFailure {
-                    logErr("MainActivity:warningToggle", it)
-                }
-            }
-            traffic.body.addView(box)
-        }
-        warningToggle(
-            "Âm cảnh báo giới hạn / vượt tốc",
-            warningSettings.voiceSpeedWarnings
-        ) { v, checked -> v.copy(voiceSpeedWarnings = checked) }
-        warningToggle(
-            "Đọc giới hạn tốc độ khi thay đổi",
-            warningSettings.announceSpeedLimitChanges
-        ) { v, checked -> v.copy(announceSpeedLimitChanges = checked) }
-        warningToggle(
-            "Âm cảnh báo Speedcam / camera đèn đỏ",
-            warningSettings.voiceCameraWarnings
-        ) { v, checked -> v.copy(voiceCameraWarnings = checked) }
         reportBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
@@ -408,6 +378,98 @@ class MainActivity : Activity() {
             .takeIf { it >= 0 } ?: 0
         selectModule(initialIndex)
     }
+    private fun addWarningSettings(root: LinearLayout) {
+        val current = runCatching { settingsRepository.read() }
+            .getOrDefault(DashboardSettings())
+
+        root.addView(TextView(this).apply {
+            text = "Cảnh báo khi lái xe"
+            textSize = 20f
+        })
+        root.addView(TextView(this).apply {
+            text = "Cảnh báo tốc độ chỉ đọc giới hạn đã xác minh; camera chỉ cảnh báo " +
+                "khi marker đã qua bộ lọc hướng/tuyến."
+            textSize = 13f
+        })
+
+        fun toggle(
+            label: String,
+            selected: Boolean,
+            update: (DashboardSettings, Boolean) -> DashboardSettings
+        ) {
+            val box = CheckBox(this).apply {
+                text = label
+                isChecked = selected
+            }
+            box.setOnCheckedChangeListener { _, checked ->
+                runCatching {
+                    settingsRepository.change { latest ->
+                        update(latest, checked)
+                    }
+                }.onFailure {
+                    logErr("MainActivity:warningToggle", it)
+                }
+            }
+            root.addView(box)
+        }
+
+        toggle(
+            "Âm cảnh báo giới hạn / vượt tốc",
+            current.voiceSpeedWarnings
+        ) { v, checked -> v.copy(voiceSpeedWarnings = checked) }
+        toggle(
+            "Đọc giới hạn tốc độ khi thay đổi",
+            current.announceSpeedLimitChanges
+        ) { v, checked -> v.copy(announceSpeedLimitChanges = checked) }
+        toggle(
+            "Âm cảnh báo Speedcam / camera đèn đỏ",
+            current.voiceCameraWarnings
+        ) { v, checked -> v.copy(voiceCameraWarnings = checked) }
+
+        val label = TextView(this).apply {
+            textSize = 15f
+        }
+        fun updateLabel(value: Int) {
+            label.text = "Phạt vi sai tốc độ: $value km/h"
+        }
+        updateLabel(current.speedWarningToleranceKmh)
+        root.addView(label)
+
+        val bar = SeekBar(this).apply {
+            max = 20
+            progress = current.speedWarningToleranceKmh
+        }
+        bar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(
+                seekBar: SeekBar?,
+                progress: Int,
+                fromUser: Boolean
+            ) {
+                updateLabel(progress)
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                val value = seekBar?.progress ?: return
+                runCatching {
+                    settingsRepository.change { latest ->
+                        latest.copy(speedWarningToleranceKmh = value)
+                    }
+                }.onFailure {
+                    logErr("MainActivity:speedTolerance", it)
+                }
+            }
+        })
+        root.addView(bar)
+
+        root.addView(TextView(this).apply {
+            text = "Ví dụ: giới hạn 60 km/h và vi sai 4 km/h → cảnh báo vượt tốc " +
+                "bắt đầu từ 65 km/h."
+            textSize = 13f
+        })
+    }
+
 
     private fun addTripModule(root: LinearLayout) {
         root.addView(TextView(this).apply {
@@ -873,13 +935,6 @@ class MainActivity : Activity() {
             current.autoRecenterSeconds,
             " giây"
         ) { v, selected -> v.copy(autoRecenterSeconds = selected) }
-
-        slider(
-            "Phạt vi sai tốc độ",
-            0, 20,
-            current.speedWarningToleranceKmh,
-            " km/h"
-        ) { v, selected -> v.copy(speedWarningToleranceKmh = selected) }
 
         root.addView(TextView(this).apply {
             text = "Auto zoom hiện được hiệu chỉnh theo video tham khảo: tốc độ càng " +
