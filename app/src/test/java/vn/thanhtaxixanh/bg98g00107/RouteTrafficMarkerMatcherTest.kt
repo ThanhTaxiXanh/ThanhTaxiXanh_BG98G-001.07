@@ -81,7 +81,27 @@ class RouteTrafficMarkerMatcherTest {
             0.0, 0.0, 90.0, true, 30.0,
             listOf(marker(100.0))
         ).isEmpty())
-    }    @Test fun configuredLongerLookaheadCanIncludeFarRouteCamera() {
+    }    @Test fun longRangeAlertStillRejectsParallelRoadCamera() {
+        val m = RouteTrafficMarkerMatcher()
+        m.setRoute(RoutePlan(
+            points = listOf(
+                RoutePoint(0.0, 0.0),
+                RoutePoint(0.0, 1300.0 / meter)
+            ),
+            timesSec = emptyList(),
+            maneuvers = emptyList(),
+            totalDistanceM = 1300,
+            totalTimeSec = 100
+        ))
+        val result = m.upcoming(
+            0.0, 0.0, 90.0, true, 3.0,
+            listOf(marker(900.0, northM = 20.0)),
+            maxLookaheadM = 1000
+        )
+        assertTrue(result.isEmpty())
+    }
+
+    @Test fun configuredLongerLookaheadCanIncludeFarRouteCamera() {
         val m = RouteTrafficMarkerMatcher()
         m.setRoute(RoutePlan(
             points = listOf(
