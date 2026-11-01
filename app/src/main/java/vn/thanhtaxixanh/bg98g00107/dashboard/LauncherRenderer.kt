@@ -777,7 +777,7 @@ class LauncherRenderer {
                 fill.color = GREEN_DAY
                 c.drawCircle(cx, cy + r * 0.6f, r * 0.22f, fill)
             }
-            "camera" -> {
+            "camera", "redlight_camera" -> {
                 fill.color = Color.rgb(123, 31, 162)
                 tmp.set(cx - r * 0.4f, cy - r * 0.85f, cx + r * 0.4f, cy - r * 0.45f)
                 c.drawRoundRect(tmp, r * 0.12f, r * 0.12f, fill)

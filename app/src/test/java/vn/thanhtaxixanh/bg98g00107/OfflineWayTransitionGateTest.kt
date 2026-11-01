@@ -34,6 +34,14 @@ class OfflineWayTransitionGateTest {
         assertTrue(gate.accept(2, 600L))
     }
 
+    @Test fun configurableTwoFixGateSupportsFreshLiveOsm() {
+        val gate = OfflineWayTransitionGate(requiredFixes = 2)
+        assertTrue(gate.accept(10, 100L))
+        assertFalse(gate.accept(20, 200L))
+        assertFalse(gate.accept(20, 200L))
+        assertTrue(gate.accept(20, 300L))
+    }
+
     @Test fun resetDropsPreviousWay() {
         val gate = OfflineWayTransitionGate()
         assertTrue(gate.accept(1, 100L))
