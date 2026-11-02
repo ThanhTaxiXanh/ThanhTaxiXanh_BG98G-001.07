@@ -33,6 +33,32 @@ class LiveCameraConfigTest {
         assertTrue(RtspWifiDiagnostic.candidateUrls("https://example.com/").isEmpty())
     }
 
+    @Test fun a500sUsesFieldObservedEntryPathAsNewInstallDefault() {
+        assertEquals("rtsp://192.168.0.1/livestream/12", LiveCameraConfig.DEFAULT_URL)
+        assertTrue(RtspWifiDiagnostic.candidateUrls(LiveCameraConfig.DEFAULT_URL)
+            .contains("rtsp://192.168.0.1/liveRTSP/v1"))
+    }
+
+    @Test fun sdpInspectorResolvesDynamicBaseAndVideoAttributes() {
+        val sdp = """
+            v=0
+            m=video 0 RTP/AVP 96
+            a=rtpmap:96 H264/90000
+            a=fmtp:96 packetization-mode=1;sprop-parameter-sets=AAAA,BBBB
+            a=control:track1
+        """.trimIndent()
+        val info = RtspWifiDiagnostic.inspectVideoSdp(
+            sdp, "rtsp://192.168.0.1/00000008/"
+        )!!
+        assertEquals("H264", info.codec)
+        assertEquals("/00000008/", info.contentBasePath)
+        assertEquals("track1", info.track)
+        assertTrue(info.hasH264ParameterSets)
+        assertEquals(null, RtspWifiDiagnostic.inspectVideoSdp(
+            "v=0\nm=audio 0 RTP/AVP 0", "rtsp://192.168.0.1/"
+        ))
+    }
+
     @Test fun stackedPresetKeepsQrAboveCameraTile() {
         val tiles = DashboardLayouts.byId("stacked")!!.layout
         val qr = tiles.tile(DashboardPanel.QR)
