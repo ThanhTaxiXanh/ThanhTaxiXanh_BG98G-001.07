@@ -77,6 +77,7 @@ dependencies {
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.1")
     // Media3 1.4.1 is compatible with this project's compileSdk 34.
     implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media3:media3-exoplayer-rtsp:1.4.1")
     implementation("androidx.media3:media3-session:1.4.1")
     testImplementation("junit:junit:4.13.2")
     // Android ships org.json at runtime; local JVM integration tests require the real parser.
