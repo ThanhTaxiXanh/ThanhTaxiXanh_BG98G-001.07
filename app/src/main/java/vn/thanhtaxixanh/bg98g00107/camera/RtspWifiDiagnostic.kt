@@ -15,6 +15,45 @@ import java.nio.charset.StandardCharsets
 object RtspWifiDiagnostic {
     data class Result(val details: String, val playableCandidate: String?)
 
+    /** SDP inspection only; never assumes a successful SETUP/PLAY/decoder. */
+    data class VideoInfo(
+        val codec: String?,
+        val contentBasePath: String?,
+        val track: String?,
+        val hasH264ParameterSets: Boolean
+    )
+
+    /**
+     * Content-Base from A500S/LIVE555 may be a per-session path such as
+     * /00000008/ while the DESCRIBE entry URL remains /livestream/12.
+     * Media3 should resolve SETUP using the server's Content-Base + a=control.
+     * Do not treat Content-Base as a permanent stream URL.
+     */
+    fun inspectVideoSdp(body: String, contentBase: String?): VideoInfo? {
+        val lines = body.lineSequence().map { it.trim() }.toList()
+        val start = lines.indexOfFirst { it.startsWith("m=video ") }
+        if (start == -1) return null
+        val section = lines.drop(start + 1).takeWhile { !it.startsWith("m=") }
+        val codec = section.firstOrNull { it.startsWith("a=rtpmap:") }
+            ?.substringAfter(" ")?.substringBefore("/")?.take(32)
+        val rawTrack = section.firstOrNull { it.startsWith("a=control:") }
+            ?.substringAfter("a=control:")
+        val track = rawTrack?.takeIf { it.matches(Regex("track[0-9]{1,3}")) }
+        // Strip hostname and possible credentials from remote Content-Base.
+        val basePath = try {
+            contentBase?.let { java.net.URI(it).path?.take(80) }
+        } catch (_: Exception) {
+            null
+        }
+        return VideoInfo(
+            codec = codec,
+            contentBasePath = basePath,
+            track = track,
+            hasH264ParameterSets = section.any { it.contains("sprop-parameter-sets=") }
+        )
+    }
+
+
     private val g5xxPaths = listOf(
         "/livestream/12", "/liveRTSP/av1", "/liveRTSP/v1",
         "/liveRTSP/av2", "/liveRTSP/av4"
@@ -71,11 +110,20 @@ object RtspWifiDiagnostic {
                         offset += count
                     }
                     val body = String(bytes, 0, offset, StandardCharsets.US_ASCII)
-                    if (status.contains(" 200 ") &&
-                        headers["content-type"]?.contains("application/sdp", true) == true &&
-                        body.contains("m=video")) {
+                    val info = if (status.contains(" 200 ") &&
+                        headers["content-type"]?.contains("application/sdp", true) == true) {
+                        inspectVideoSdp(body, headers["content-base"])
+                    } else null
+                    if (info != null) {
                         best = url
-                        "DESCRIBE 200 + SDP VIDEO"
+                        "DESCRIBE 200 + SDP VIDEO" +
+                            (info.codec?.let { " · codec: $it" } ?: "") +
+                            (info.contentBasePath?.let { " · Content-Base: $it" } ?: "") +
+                            (info.track?.let { " · control: $it" } ?: "") +
+                            (if (info.codec.equals("H264", true)) {
+                                if (info.hasH264ParameterSets) " · SPS/PPS có sẵn"
+                                else " · chưa thấy SPS/PPS trong SDP"
+                            } else "")
                     } else {
                         (status.take(72).ifBlank { "Không có phản hồi RTSP" }) +
                             if (status.contains(" 200 ")) " (chưa tìm thấy SDP video)" else ""
