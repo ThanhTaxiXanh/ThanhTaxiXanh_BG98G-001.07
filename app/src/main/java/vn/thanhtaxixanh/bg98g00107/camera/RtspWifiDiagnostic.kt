@@ -5,7 +5,6 @@ import java.io.BufferedInputStream
 import java.net.InetSocketAddress
 import java.net.URI
 import java.nio.charset.StandardCharsets
-import kotlin.math.min
 
 /**
  * Read-only RTSP DESCRIBE/SDP diagnostics for locally attached Wi-Fi cameras.
@@ -55,9 +54,9 @@ object RtspWifiDiagnostic {
                     val input = BufferedInputStream(socket.getInputStream())
                     val status = readLine(input, 400)
                     val headers = HashMap<String, String>()
-                    repeat(48) {
+                    for (index in 0 until 48) {
                         val line = readLine(input, 1000)
-                        if (line.isBlank()) return@repeat
+                        if (line.isBlank()) break
                         val colon = line.indexOf(':')
                         if (colon > 0) headers[line.substring(0, colon)
                             .lowercase()] = line.substring(colon + 1).trim()
