@@ -2,6 +2,11 @@ package vn.thanhtaxixanh.bg98g00107.ai
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.graphics.Color
+import android.os.Handler
+import android.os.Looper
+import vn.thanhtaxixanh.bg98g00107.camera.LiveCameraController
+import vn.thanhtaxixanh.bg98g00107.camera.LiveCameraConfig
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -17,6 +22,17 @@ class AiCameraActivity : Activity() {
     private val importer by lazy { AiCameraImporter(applicationContext) }
     private lateinit var info: TextView
     private lateinit var rows: LinearLayout
+    private lateinit var livePreview: ImageView
+    private lateinit var liveStatus: TextView
+    private lateinit var streamUrl: EditText
+    private val liveHandler = Handler(Looper.getMainLooper())
+    private val liveConsumer = "ai-camera@" + System.identityHashCode(this)
+    private val liveTicker = object : Runnable {
+        override fun run() {
+            updateLivePreview()
+            liveHandler.postDelayed(this, 500L)
+        }
+    }
     private val pad by lazy { (12*resources.displayMetrics.density).toInt() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,6 +47,47 @@ class AiCameraActivity : Activity() {
             "Nếu dùng mô hình khác, hãy nhập labels.txt. AI chỉ đề xuất, không thay thế biển thật."))
         info=label("")
         body.addView(info)
+
+        // Share the headless RTSP decoder with the Android Auto debug tile.
+        // This preview is real received video, never a fabricated camera frame.
+        body.addView(label("CAMERA TRỰC TIẾP · 70mai / RTSP"))
+        livePreview = ImageView(this).apply {
+            setBackgroundColor(Color.BLACK)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            adjustViewBounds = true
+        }
+        body.addView(livePreview, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            (218 * resources.displayMetrics.density).toInt()
+        ))
+        liveStatus = label("Camera chưa kết nối")
+        body.addView(liveStatus)
+        streamUrl = EditText(this).apply {
+            setSingleLine(true)
+            hint = "rtsp://192.168.0.1/"
+            setText(LiveCameraConfig.url(applicationContext))
+        }
+        body.addView(streamUrl)
+        body.addView(button("Kết nối / cập nhật Camera trực tiếp") {
+            try {
+                LiveCameraController.connect(
+                    applicationContext, streamUrl.text.toString()
+                )
+                updateLivePreview()
+            } catch (e: Exception) {
+                Toast.makeText(this, e.message ?: "Không thể lưu URL RTSP",
+                    Toast.LENGTH_LONG).show()
+            }
+        })
+        body.addView(button("Ngắt Camera trực tiếp") {
+            LiveCameraController.disconnect(applicationContext)
+            updateLivePreview()
+        })
+        body.addView(label(
+            "Chỉ thử kết nối khi xe đã dừng. RTSP mặc định của profile 70mai G5XX " +
+            "chưa xác minh được bước bắt tay và đường phát hình trên A500S Plus. " +
+            "Cần kết nối đúng Wi-Fi của camera; không nhập mật khẩu RTSP để chia sẻ công khai."
+        ))
         body.addView(button("Cài VTSR YOLOv8n · 56 biển Việt Nam") {
             AlertDialog.Builder(this)
                 .setTitle("Tải mô hình VTSR từ Hugging Face")
@@ -97,6 +154,28 @@ class AiCameraActivity : Activity() {
         setContentView(ScrollView(this).apply { addView(body) })
         refresh()
     }
+    override fun onStart() {
+        super.onStart()
+        LiveCameraController.attach(applicationContext, liveConsumer) {
+            updateLivePreview()
+        }
+        updateLivePreview()
+        liveHandler.post(liveTicker)
+    }
+
+    override fun onStop() {
+        liveHandler.removeCallbacks(liveTicker)
+        LiveCameraController.detach(liveConsumer)
+        super.onStop()
+    }
+
+    private fun updateLivePreview() {
+        if (!::livePreview.isInitialized) return
+        val snapshot = LiveCameraController.snapshot()
+        livePreview.setImageBitmap(snapshot.bitmap)
+        liveStatus.text = snapshot.status
+    }
+
     private fun label(value:String)=TextView(this).apply {
         text=value; textSize=15f; setPadding(0,pad/2,0,pad/2)
         setTextColor(android.graphics.Color.rgb(24,38,52))
