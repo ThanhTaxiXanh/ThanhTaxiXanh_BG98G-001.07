@@ -1178,7 +1178,8 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                 if (!duplicate) mergedWarnings.add(candidate)
             }
             signsState = baseState.copy(
-                upcoming = mergedWarnings.sortedBy { it.distM }.take(4)
+                // Preserve camera entries even when several road signs are closer.
+                upcoming = mergedWarnings.sortedBy { it.distM }.take(12)
             )
             val laneRoad = signsState.roadWayId?.let { wayId ->
                 offlineRoadContext.firstOrNull {
