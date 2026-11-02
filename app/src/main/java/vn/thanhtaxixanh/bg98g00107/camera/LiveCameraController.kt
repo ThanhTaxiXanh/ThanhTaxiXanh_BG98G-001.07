@@ -86,7 +86,8 @@ object LiveCameraController {
             return
         }
         state = "Đang kết nối Camera..."
-        val active = CameraFrameSink(
+        lateinit var active: CameraFrameSink
+        active = CameraFrameSink(
             onFrame = { bitmap ->
                 latest = bitmap
                 latestTimeMs = SystemClock.elapsedRealtime()
