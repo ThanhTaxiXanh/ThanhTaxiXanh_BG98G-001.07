@@ -44,7 +44,7 @@ class AiCameraActivity : Activity() {
         }
         body.addView(label("TTX AI Camera · Xác minh biển báo"))
         body.addView(label("70mai A500S Plus: tải video/ảnh bằng ứng dụng 70mai rồi nhập vào đây. " +
-            "Chưa có RTSP/API live được xác minh. Video tải về không tự mang GPS gốc."))
+            "Luồng RTSP thực tế phụ thuộc firmware. Video tải về không tự mang GPS gốc."))
         body.addView(label("VTSR YOLOv8 INT8 có thể lấy thứ tự 56 lớp từ metadata ONNX. " +
             "Nếu dùng mô hình khác, hãy nhập labels.txt. AI chỉ đề xuất, không thay thế biển thật."))
         info=label("")
@@ -66,12 +66,12 @@ class AiCameraActivity : Activity() {
         body.addView(liveStatus)
         streamUrl = EditText(this).apply {
             setSingleLine(true)
-            hint = "rtsp://192.168.0.1/"
+            hint = "rtsp://192.168.0.1/livestream/12"
             setText(LiveCameraConfig.url(applicationContext))
         }
         body.addView(streamUrl)
         forceTcp = CheckBox(this).apply {
-            text = "Truyền RTP qua TCP (khuyên thử trước, bỏ chọn để dùng UDP)"
+            text = "Buộc truyền RTP qua TCP (mặc định thử UDP cho A500S)"
             isChecked = LiveCameraConfig.forceTcp(applicationContext)
         }
         body.addView(forceTcp)
@@ -112,8 +112,8 @@ class AiCameraActivity : Activity() {
             updateLivePreview()
         })
         body.addView(label(
-            "Chỉ thử kết nối khi xe đã dừng. RTSP mặc định của profile 70mai G5XX " +
-            "chưa xác minh được bước bắt tay và đường phát hình trên A500S Plus. " +
+            "Chỉ thử kết nối khi xe đã dừng. Đường /livestream/12 được người dùng A500S " +
+            "khác ghi nhận trả SDP H.264; chưa xác minh trên camera này. " +
             "Cần kết nối đúng Wi-Fi của camera; 200 OK ở OPTIONS chưa đủ. " +
             "Chạy chẩn đoán DESCRIBE/SDP để tìm ứng viên phát, rồi kết nối. " +
             "Không nhập mật khẩu RTSP để chia sẻ công khai."
