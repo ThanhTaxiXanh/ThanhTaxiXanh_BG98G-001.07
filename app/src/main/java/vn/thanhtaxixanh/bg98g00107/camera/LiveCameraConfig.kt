@@ -8,7 +8,7 @@ import java.net.URI
  * Credentials are not logged. The user must supply a path that actually streams.
  */
 object LiveCameraConfig {
-    const val DEFAULT_URL = "rtsp://192.168.0.1/"
+    const val DEFAULT_URL = "rtsp://192.168.0.1/livestream/12"
     private const val PREFS = "ttx_live_camera"
     private const val KEY_URL = "stream_url"
     private const val KEY_ENABLED = "stream_enabled"
@@ -34,9 +34,9 @@ object LiveCameraConfig {
 
     fun forceTcp(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_FORCE_TCP, true)
+            .getBoolean(KEY_FORCE_TCP, false)
 
-    fun save(context: Context, raw: String, enabled: Boolean, forceTcp: Boolean = true) {
+    fun save(context: Context, raw: String, enabled: Boolean, forceTcp: Boolean = false) {
         val url = raw.trim()
         require(isValidRtsp(url)) { "URL RTSP không hợp lệ." }
         check(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
