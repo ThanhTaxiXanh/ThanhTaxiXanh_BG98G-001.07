@@ -120,7 +120,7 @@ object LiveCameraController {
         notifyClients()
     }
 
-    @OptIn(UnstableApi::class)
+    @UnstableApi
     private fun startPlayer(context: Context, url: String, surface: Surface) {
         // Unlike the old default socket, use the same Wi-Fi as the successful
         // 70mai OPTIONS probe. Do not bind the entire app/process to Wi-Fi:
