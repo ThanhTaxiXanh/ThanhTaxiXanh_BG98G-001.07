@@ -32,3 +32,28 @@
 - `gradle :app:assembleDebug :app:testDebugUnitTest`
 - `gradle :app:assembleDebugAndroidTest :app:lintDebug`
 - Thử nghiệm điện thoại thật và Android Auto 934×844 còn **PENDING** cho đến khi có camera thật và host tương thích.
+
+
+## Phát hiện thực tế từ thử nghiệm Build #85 (02/11/2026)
+
+- Người dùng kiểm tra Wi-Fi 70mai A500S Plus và nhận **`RTSP/1.0 200 OK`** cho lệnh OPTIONS qua `network.socketFactory`.
+- Bộ phát Media3 ở Build #85 báo **`ERROR_CODE_IO_UNSPECIFIED`**; không có frame trong ô điện thoại. Kết quả không đủ để kết luận camera đã có/không có luồng RTSP.
+- Khác biệt mã nguồn: probe dùng Wi-Fi socket trực tiếp; ExoPlayer cũ dùng socket hệ thống mặc định, có thể bị Android định tuyến qua LTE khi Wi-Fi 70mai không có Internet.
+
+## Bản vá tiếp theo (sau Build #85)
+
+1. `CameraWifiNetwork`: tìm `NetworkCapabilities.TRANSPORT_WIFI` để chọn socket Wi-Fi mà không thay đổi default route của toàn ứng dụng.
+2. `LiveCameraController`: dùng `RtspMediaSource.Factory().setSocketFactory(wifi.socketFactory)` và `setForceUseRtpTcp(...)`; mặc định dùng RTP/TCP, có checkbox chuyển về UDP trong AI Camera; tăng timeout đọc video tới 12 giây.
+3. `RtspWifiDiagnostic`: chạy **DESCRIBE** chỉ-đọc qua Wi-Fi để tìm dữ liệu SDP có `m=video`, lần lượt trên URL đang nhập và các ứng viên G5XX (gốc, `/livestream/12`, `/liveRTSP/av1`, `/liveRTSP/v1`, `/liveRTSP/av2`, `/liveRTSP/av4`). Danh sách này chỉ là **đường dẫn ứng viên**, không được coi là đã hoạt động trên A500S Plus.
+4. AI Camera hiện kết quả từng URL, nếu có SDP video thì tự điền ứng viên vào ô URL; người dùng **phải bấm Kết nối** để thử SETUP/PLAY thật. Không tự gửi lệnh CGI/handshake chưa xác minh.
+5. Nếu chẩn đoán chỉ được 200 OPTIONS mà mọi DESCRIBE thất bại, kiểm tra app 70mai/xADAS và firmware trước. Dự án **chưa có** quy trình handshake hãng được xác minh.
+
+### Thử lại trên điện thoại
+
+- Kết nối Wi-Fi `70mai_...` trên Android. Nếu hiện 'Wi-Fi không có Internet', chọn tiếp tục giữ kết nối.
+- TTX → AI Camera → **Chẩn đoán đường phát (DESCRIBE / SDP)** → chờ kết quả hiện trên cùng trang.
+- Nếu tìm thấy `DESCRIBE 200 + SDP VIDEO`, bấm **Kết nối / cập nhật Camera trực tiếp** (TCP bật mặc định). Nếu thất bại, thử bỏ chọn TCP để dùng UDP; ghi lại dòng lỗi và trạng thái SDP.
+- Nếu SDP không có `m=video`, không có bằng chứng URL đó phát hình; **200 OPTIONS không có nghĩa camera sẵn sàng PLAY**.
+- Chỉ khi preview điện thoại thật hiện hình mới kiểm tra ô dưới VietQR trong Android Auto debug; **không thao tác trên điện thoại khi xe đang di chuyển**.
+
+**Giới hạn:** Đã sửa định tuyến theo API Media3, nhưng chưa thử với A500S Plus thật. Android Auto release giữ ràng buộc map-only; không thay đổi cơ chế an toàn Android Auto.
