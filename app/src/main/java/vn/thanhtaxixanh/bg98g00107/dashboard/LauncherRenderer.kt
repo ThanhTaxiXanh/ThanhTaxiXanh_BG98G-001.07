@@ -228,8 +228,8 @@ class LauncherRenderer {
         else drawDisabledPanel(c, cal, "Lịch đã ẩn")
         if (st.settings.showQr) drawQr(c, qr, st.qrFile)
         else drawDisabledPanel(c, qr, "QR đã ẩn")
-        if (st.settings.showSigns) drawSigns(c, signs, st)
-        else drawDisabledPanel(c, signs, "Biển báo đã ẩn")
+        if (st.settings.showSigns) drawCameraWarnings(c, signs, st)
+        else drawDisabledPanel(c, signs, "Camera đã ẩn")
         drawIcons(c, icons, st.selectedIcon)
     }
 
@@ -940,69 +940,83 @@ class LauncherRenderer {
 
     private fun fmtDist(m: Int): String = if (m >= 100) "${m / 10 * 10} m" else "$m m"
 
-    private fun drawSigns(c: Canvas, r: RectF, st: UiState) {
-        val sg = st.signs
+    /**
+     * Camera warning tile. Keep DashboardPanel.SIGNS as the persisted layout
+     * identifier so saved tile positions and user settings remain compatible.
+     * This tile displays *road camera warnings*, not a live camera video feed.
+     * The separate map speed-limit badge remains in drawBubbles().
+     */
+    private fun drawCameraWarnings(c: Canvas, r: RectF, st: UiState) {
         val k = minOf(r.width() / 318f, r.height() / 223f, 1.2f)
         card(c, r, 24f * k)
-        val pad = maxOf(8f, 14f * k)
+        val pad = maxOf(7f, 13f * k)
         val inner = RectF(r.left + pad, r.top + pad, r.right - pad, r.bottom - pad)
-        val lim = sg.limit
-        val over = lim != null && st.gpsFix && st.speedKmh != null &&
-            st.speedKmh > lim + st.settings.speedWarningToleranceKmh
-        val fs = maxOf(11f, 15f * k)
-        val sub = when {
-            over -> "Đang vượt tốc độ"
-            lim == null -> sg.status
-            sg.estimated -> "Giá trị ước tính"
-            else -> "Nguồn: OpenStreetMap"
-        }
-        val subColor = if (over) RED else MUTED
-        val wide = r.width() >= r.height() * 1.25f
-        val listTop: Float
+        val fs = maxOf(10f, 15f * k)
+        val cameras = if (st.gpsFix) CameraPanelPolicy.visible(
+            st.signs.upcoming,
+            st.settings.warnSpeedCameras,
+            st.settings.warnRedLightCameras
+        ) else emptyList()
 
-        if (wide) {
-            val sr = minOf(inner.height() * 0.30f, inner.width() * 0.16f)
-            val cx = inner.left + sr
-            val cy = inner.top + sr
-            speedSign(c, cx, cy, sr, lim, sg.estimated, over)
-            val tx = cx + sr + pad
-            val mw = inner.right - tx
-            text(c, "Giới hạn tốc độ", tx, cy - sr * 0.1f, fs * 1.1f, Color.WHITE, true, Paint.Align.LEFT, mw)
-            text(c, sub, tx, cy + sr * 0.4f, fs * 0.85f, subColor, false, Paint.Align.LEFT, mw)
-            listTop = cy + sr + pad
-        } else {
-            val sr = minOf(inner.width() * 0.24f, inner.height() * 0.2f)
-            val cx = inner.centerX()
-            val cy = inner.top + sr
-            speedSign(c, cx, cy, sr, lim, sg.estimated, over)
-            textMid(c, sub, cx, cy + sr + fs * 1.0f, fs * 0.85f, subColor, false, inner.width())
-            listTop = cy + sr + fs * 2.0f
-        }
+        val headerY = inner.top + fs * 1.05f
+        text(c, "Camera phía trước", inner.left, headerY,
+            fs * 1.08f, Color.WHITE, true, Paint.Align.LEFT, inner.width())
+        val infoY = headerY + fs * 1.12f
+        text(c, "Dữ liệu OSM · tham khảo", inner.left, infoY,
+            fs * 0.78f, MUTED, false, Paint.Align.LEFT, inner.width())
+        val listTop = infoY + maxOf(8f, 14f * k)
+        val availableH = inner.bottom - listTop
+        if (availableH <= 0f) return
 
-        val rowH = maxOf(24f, 34f * k)
-        val rows = minOf(3, ((inner.bottom - listTop) / rowH).toInt())
-        if (rows <= 0) return
-        if (sg.upcoming.isEmpty()) {
-            textMid(c, "Chưa có biển báo phía trước", inner.centerX(), listTop + rowH / 2f, fs * 0.9f, MUTED, false, inner.width())
+        if (!st.gpsFix || cameras.isEmpty()) {
+            val message = when {
+                !st.gpsFix -> "Đang chờ tín hiệu GPS"
+                !st.settings.warnSpeedCameras && !st.settings.warnRedLightCameras ->
+                    "Đã tắt cảnh báo Camera"
+                else -> "Chưa có dữ liệu camera phía trước"
+            }
+            textMid(c, message, inner.centerX(),
+                listTop + minOf(availableH * 0.5f, 38f * k),
+                fs * 0.9f, MUTED, false, inner.width())
             return
         }
-        val gr = rowH * 0.36f
-        for ((i, u) in sg.upcoming.take(rows).withIndex()) {
-            val cy = listTop + i * rowH + rowH / 2f
-            signGlyph(c, inner.left + gr, cy, gr, u.item)
-            val ds = fmtDist(u.distM)
-            val dcol = if (u.distM <= 80) RED else ACCENT
+
+        // Adaptive row count for compact, wide and user-edited layouts.
+        val minRowH = maxOf(25f, 37f * k)
+        val rows = minOf(cameras.size, 3, maxOf(1, (availableH / minRowH).toInt()))
+        val rowH = minOf(maxOf(minRowH, availableH / rows), 64f * k)
+        for ((index, warning) in cameras.take(rows).withIndex()) {
+            val cy = listTop + index * rowH + rowH / 2f
+            if (cy + rowH / 2f > inner.bottom + 1f) break
+            val iconR = minOf(rowH * 0.31f, inner.width() * 0.095f)
+            signGlyph(c, inner.left + iconR, cy, iconR, warning.item)
+            val critical = warning.distM <= st.settings.cameraFinalWarningM
+            val near = warning.distM <= st.settings.cameraNearWarningM
+            val label = if (warning.item.type == "redlight_camera") {
+                "Camera đèn đỏ"
+            } else {
+                "Camera tốc độ"
+            }
+            val distance = fmtDist(warning.distM)
             tp.typeface = Typeface.DEFAULT_BOLD
-            tp.textSize = fs
-            val dw = tp.measureText(ds)
-            // Datmap-inspired distance badge with original drawn UI.
-            val pillW = minOf(inner.width() * 0.38f, dw + 16f * k)
-            val distancePill = RectF(inner.right - pillW, cy - rowH * 0.34f, inner.right, cy + rowH * 0.34f)
-            fill.color = if (u.distM < 100) Color.rgb(220, 62, 69) else Color.rgb(175, 57, 69)
-            c.drawRoundRect(distancePill, rowH * 0.3f, rowH * 0.3f, fill)
-            textMid(c, ds, distancePill.centerX(), distancePill.centerY(), fs * 0.89f, Color.WHITE, true, distancePill.width() - 5f * k)
-            val nx = inner.left + gr * 2f + 8f * k
-            text(c, u.item.name, nx, cy + fs * 0.36f, fs, Color.WHITE, false, Paint.Align.LEFT, distancePill.left - 8f * k - nx)
+            tp.textSize = fs * 0.90f
+            val badgeW = minOf(inner.width() * 0.36f,
+                maxOf(38f * k, tp.measureText(distance) + 14f * k))
+            val badgeH = minOf(rowH * 0.62f, 32f * k)
+            val badge = RectF(inner.right - badgeW, cy - badgeH / 2f,
+                inner.right, cy + badgeH / 2f)
+            fill.color = when {
+                critical -> RED
+                near -> Color.rgb(197, 92, 39)
+                else -> Color.rgb(80, 74, 151)
+            }
+            c.drawRoundRect(badge, badgeH * 0.38f, badgeH * 0.38f, fill)
+            textMid(c, distance, badge.centerX(), badge.centerY(),
+                fs * 0.82f, Color.WHITE, true, badge.width() - 5f * k)
+            val tx = inner.left + iconR * 2f + maxOf(5f, 8f * k)
+            text(c, label, tx, cy + fs * 0.35f,
+                fs * 0.9f, Color.WHITE, index == 0,
+                Paint.Align.LEFT, maxOf(0f, badge.left - 5f * k - tx))
         }
     }
 
