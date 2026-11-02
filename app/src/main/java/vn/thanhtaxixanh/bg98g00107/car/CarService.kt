@@ -6,6 +6,7 @@ import vn.thanhtaxixanh.bg98g00107.core.logErr
 import vn.thanhtaxixanh.bg98g00107.dashboard.DashboardSettings
 import vn.thanhtaxixanh.bg98g00107.dashboard.DashboardSettingsRepository
 import vn.thanhtaxixanh.bg98g00107.dashboard.LauncherRenderer
+import vn.thanhtaxixanh.bg98g00107.camera.LiveCameraController
 import vn.thanhtaxixanh.bg98g00107.dashboard.UiState
 import vn.thanhtaxixanh.bg98g00107.map.NativeMap
 import vn.thanhtaxixanh.bg98g00107.navigation.BRouterServiceClient
@@ -131,6 +132,7 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
     private val maps = NativeMap(appCtx, handler)
     private val tripRecorder = TripRecorder(appCtx)
     private val renderer = LauncherRenderer()
+    private val cameraOwner = "car@" + System.identityHashCode(this)
     private var gpsRegistered = false
     private var gnssRegistered = false
     private var locationPermission = false
@@ -426,6 +428,10 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
 
     private fun startUpdates() {
         if (!surfaceState.canRun()) return
+        if (isDebuggable) LiveCameraController.attach(appCtx, cameraOwner, {
+            if (surfaceState.canRun() &&
+                SystemClock.uptimeMillis() - lastDraw >= 350L) draw()
+        })
         locationPermission = hasFineLocation()
         if (!tickerRunning) {
             tickerRunning = true
@@ -472,6 +478,7 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
     }
 
     private fun stopUpdates() {
+        if (isDebuggable) LiveCameraController.detach(cameraOwner)
         voiceAnnouncer.stop()
         tickerRunning = false
         handler.removeCallbacks(ticker)
@@ -501,6 +508,7 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
         try {
             val gpsReady = gpsState() == CarGpsState.READY
             maps.withFrame { mapFrame ->
+                val camera = if (isDebuggable) LiveCameraController.snapshot() else null
                 val st = UiState(
                     speedKmh = speedKmh.takeIf { gpsReady },
                     gpsFix = gpsReady,
@@ -518,7 +526,9 @@ class LauncherScreen(ctx: CarContext, private val appCtx: Context) : Screen(ctx)
                     signs = if (gpsReady) maps.signsState else SignsState.EMPTY,
                     settings = currentSettings,
                     guidance = maps.guidanceState,
-                    laneGuidance = maps.laneGuidanceState
+                    laneGuidance = maps.laneGuidanceState,
+                    cameraFrame = camera?.bitmap,
+                    cameraStatus = camera?.status ?: "Camera không khả dụng"
                 )
                 if (isDebuggable) {
                     // Personal/debug Android Auto mode: always keep the full dashboard
