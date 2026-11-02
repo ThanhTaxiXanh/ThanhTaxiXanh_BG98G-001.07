@@ -60,7 +60,7 @@ object LiveCameraController {
     }
 
     /** Starts only after the phone user explicitly enables and saves a source. */
-    fun connect(context: Context, url: String, forceTcp: Boolean = true) {
+    fun connect(context: Context, url: String, forceTcp: Boolean = false) {
         require(Looper.myLooper() == Looper.getMainLooper())
         LiveCameraConfig.save(context, url, true, forceTcp)
         applicationContext = context.applicationContext
