@@ -12,6 +12,7 @@ object LiveCameraConfig {
     private const val PREFS = "ttx_live_camera"
     private const val KEY_URL = "stream_url"
     private const val KEY_ENABLED = "stream_enabled"
+    private const val KEY_FORCE_TCP = "force_rtsp_tcp"
 
     fun isValidRtsp(raw: String): Boolean = try {
         val uri = URI(raw.trim())
@@ -31,11 +32,17 @@ object LiveCameraConfig {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getBoolean(KEY_ENABLED, false)
 
-    fun save(context: Context, raw: String, enabled: Boolean) {
+    fun forceTcp(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_FORCE_TCP, true)
+
+    fun save(context: Context, raw: String, enabled: Boolean, forceTcp: Boolean = true) {
         val url = raw.trim()
         require(isValidRtsp(url)) { "URL RTSP không hợp lệ." }
         check(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(KEY_URL, url).putBoolean(KEY_ENABLED, enabled).commit()) {
+            .putString(KEY_URL, url)
+            .putBoolean(KEY_ENABLED, enabled)
+            .putBoolean(KEY_FORCE_TCP, forceTcp).commit()) {
             "Không thể lưu cấu hình Camera."
         }
     }
