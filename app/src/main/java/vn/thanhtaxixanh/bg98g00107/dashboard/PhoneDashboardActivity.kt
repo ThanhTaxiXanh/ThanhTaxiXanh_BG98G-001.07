@@ -3,6 +3,7 @@ package vn.thanhtaxixanh.bg98g00107.dashboard
 import vn.thanhtaxixanh.bg98g00107.calendar.EventLine
 import vn.thanhtaxixanh.bg98g00107.calendar.Events
 import vn.thanhtaxixanh.bg98g00107.car.CarService
+import vn.thanhtaxixanh.bg98g00107.camera.LiveCameraController
 import vn.thanhtaxixanh.bg98g00107.core.logErr
 import vn.thanhtaxixanh.bg98g00107.map.NativeMap
 import vn.thanhtaxixanh.bg98g00107.navigation.BRouterServiceClient
@@ -216,6 +217,9 @@ class PhoneDashboardActivity : Activity() {
     override fun onStart() {
         super.onStart()
         if (!lifetime.start()) return
+        LiveCameraController.attach(applicationContext, "phone-dashboard", {
+            if (lifetime.active) view.postInvalidateOnAnimation()
+        })
         maps.onFrame = {
             if (lifetime.active) view.postInvalidateOnAnimation()
         }
@@ -225,6 +229,7 @@ class PhoneDashboardActivity : Activity() {
     }
 
     override fun onStop() {
+        LiveCameraController.detach("phone-dashboard")
         lifetime.stop()
         handler.removeCallbacks(ticker)
         unregisterGps()
@@ -540,7 +545,9 @@ class PhoneDashboardActivity : Activity() {
                     signs = if (gpsGood) maps.signsState else SignsState.EMPTY,
                     settings = settings,
                     guidance = maps.guidanceState,
-                    laneGuidance = maps.laneGuidanceState
+                    laneGuidance = maps.laneGuidanceState,
+                    cameraFrame = LiveCameraController.snapshot().bitmap,
+                    cameraStatus = LiveCameraController.snapshot().status
                 ))
             }
         }

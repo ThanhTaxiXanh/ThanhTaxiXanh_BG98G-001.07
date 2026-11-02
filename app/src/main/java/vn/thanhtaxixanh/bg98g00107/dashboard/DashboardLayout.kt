@@ -15,7 +15,7 @@ enum class DashboardPanel(val title: String) {
     MAP("Bản đồ"),
     CALENDAR("Lịch"),
     QR("Mã QR"),
-    SIGNS("Biển báo")
+    SIGNS("Camera trực tiếp")
 }
 
 data class DashboardTile(
@@ -89,7 +89,7 @@ object DashboardLayouts {
             tile(map,1,0,6,12), tile(cal,7,0,5,4),
             tile(qr,7,4,5,4), tile(signs,7,8,5,4)
         )),
-        DashboardPreset("signs_first", "03 · Ưu tiên biển báo", layout(
+        DashboardPreset("signs_first", "03 · Ưu tiên Camera", layout(
             tile(map,1,0,6,12), tile(signs,7,0,5,5),
             tile(cal,7,5,5,3), tile(qr,7,8,5,4)
         )),
@@ -105,7 +105,7 @@ object DashboardLayouts {
             tile(map,1,0,5,12), tile(cal,6,0,6,4),
             tile(qr,6,4,3,8), tile(signs,9,4,3,8)
         )),
-        DashboardPreset("bottom_signs", "07 · Biển báo phía dưới", layout(
+        DashboardPreset("bottom_signs", "07 · Camera phía dưới", layout(
             tile(map,1,0,7,9), tile(cal,8,0,4,4),
             tile(qr,8,4,4,5), tile(signs,1,9,11,3)
         )),

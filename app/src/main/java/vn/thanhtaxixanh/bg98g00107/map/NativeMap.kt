@@ -58,6 +58,9 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import vn.thanhtaxixanh.bg98g00107.ai.AiReviewStore
+import vn.thanhtaxixanh.bg98g00107.ai.AiReviewStatus
+import vn.thanhtaxixanh.bg98g00107.ai.AiObservation
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -132,6 +135,9 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
     private var signsKey = Int.MIN_VALUE
     private val signsSrc = "ct-signs"
     private val reportsSrc = "ct-personal-reports"
+    private val aiEvidenceSrc = "ttx-user-ai-evidence"
+    private var aiEvidenceSnapshot: List<AiObservation> = emptyList()
+    private var aiEvidenceKey = Int.MIN_VALUE
     private val osmRegionsSrc = "ct-regional-osm-signs"
     private val routeSrc = "ct-active-route"
     private val currentTripSrc = "ct-current-trip"
@@ -1325,6 +1331,14 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
                 logErr("NativeMap:personalReports", e)
                 emptyList()
             } else emptyList()
+            val aiEvidence = try {
+                AiReviewStore(appCtx).list().filter {
+                    it.reviewStatus == AiReviewStatus.APPROVED_LOCAL
+                }
+            } catch (e: Exception) {
+                logErr("NativeMap:aiRead",e)
+                emptyList()
+            }
             val regional = if (hasFix) try {
                 (regionDb.nearby(tLat, tLon) +
                     nationalBundle.nearby(tLat, tLon)).distinctBy { it.osmId }.take(160)
@@ -1351,11 +1365,13 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             main.post {
                 reportLayerEnabled = enabled
                 reportSnapshot = records
+                aiEvidenceSnapshot = aiEvidence
                 regionMarkers = regional
                 routeCameraMarkers = cameras
                 reportsLoading = false
                 drawPersonalReports(nowMs)
                 drawRegionalMarkers()
+                drawAiEvidence()
             }
         }
         // GPS position can change between file polls, so update the clip.
@@ -1439,6 +1455,56 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
         } catch (e: Exception) {
             logErr("NativeMap:installRegionalOsm", e)
         }
+    }
+
+    /**
+     * User-reviewed AI observations are a separate personal evidence layer.
+     * They NEVER override road maxspeed or claim official legal status.
+     */
+    private fun installAiEvidence(style: Style) {
+        try {
+            aiEvidenceKey = Int.MIN_VALUE
+            style.addSource(GeoJsonSource(aiEvidenceSrc))
+            style.addLayer(CircleLayer("ttx-user-ai-evidence-circles",aiEvidenceSrc)
+                .withProperties(
+                    PropertyFactory.circleRadius(9f),
+                    PropertyFactory.circleColor("#fdd835"),
+                    PropertyFactory.circleStrokeColor("#263238"),
+                    PropertyFactory.circleStrokeWidth(2f)
+                ))
+            style.addLayer(SymbolLayer("ttx-user-ai-evidence-labels",aiEvidenceSrc)
+                .withProperties(
+                    PropertyFactory.textField(Expression.get("label")),
+                    PropertyFactory.textFont(arrayOf("Noto Sans Bold")),
+                    PropertyFactory.textSize(11f),
+                    PropertyFactory.textColor("#212121"),
+                    PropertyFactory.textAllowOverlap(false)
+                ))
+        } catch (e: Exception) { logErr("NativeMap:aiLayer",e) }
+    }
+
+    private fun drawAiEvidence() {
+        val source = map?.style?.getSourceAs<GeoJsonSource>(aiEvidenceSrc) ?: return
+        val visible = aiEvidenceSnapshot.filter {
+            it.reviewStatus == AiReviewStatus.APPROVED_LOCAL &&
+                it.lat != null && it.lon != null
+        }
+        var key = visible.size
+        visible.forEach { key=31*key+it.id.hashCode()+it.proposedSpeedKph.hashCode() }
+        if (key == aiEvidenceKey) return
+        source.setGeoJson(FeatureCollection.fromFeatures(visible.mapNotNull { observation ->
+            val lat = observation.lat ?: return@mapNotNull null
+            val lon = observation.lon ?: return@mapNotNull null
+            Feature.fromGeometry(Point.fromLngLat(lon,lat)).apply {
+                val speed = observation.proposedSpeedKph
+                addStringProperty("label",
+                    if (observation.isSpeedPoint() && speed != null)
+                        "AI duyệt cá nhân " + speed
+                    else "AI duyệt cá nhân")
+                addStringProperty("verification","user_reviewed_not_official")
+            }
+        }))
+        aiEvidenceKey = key
     }
 
     private fun installPersonalReports(style: Style) {
@@ -1634,6 +1700,7 @@ class NativeMap(private val appCtx: Context, private val main: Handler) {
             installSigns(style)
             installRegionalMarkers(style)
             installPersonalReports(style)
+            installAiEvidence(style)
             status = "Bản đồ đã tải"
             if (perfDebug) {
                 performance.finishMapLoad(SystemClock.elapsedRealtime())?.let {

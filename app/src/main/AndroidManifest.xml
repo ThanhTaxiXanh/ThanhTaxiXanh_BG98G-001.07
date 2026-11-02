@@ -10,6 +10,8 @@
 
     <queries>
         <package android:name="btools.routingapp" />
+        <!-- Optional official xADAS integration discovery, no privileged access. -->
+        <package android:name="com.kaibatech.drivedeck.xadas" />
     </queries>
 
     <application
@@ -45,6 +47,10 @@
             android:name=".dashboard.PhoneDashboardActivity"
             android:exported="false"
             android:screenOrientation="sensorLandscape" />
+
+        <activity
+            android:name=".ai.AiCameraActivity"
+            android:exported="false" />
 
         <activity
             android:name=".ui.MainActivity"
