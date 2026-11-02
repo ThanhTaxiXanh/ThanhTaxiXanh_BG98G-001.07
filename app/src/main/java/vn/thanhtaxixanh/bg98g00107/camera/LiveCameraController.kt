@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.Surface
+import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -120,7 +121,7 @@ object LiveCameraController {
         notifyClients()
     }
 
-    @UnstableApi
+    @OptIn(UnstableApi::class)
     private fun startPlayer(context: Context, url: String, surface: Surface) {
         // Unlike the old default socket, use the same Wi-Fi as the successful
         // 70mai OPTIONS probe. Do not bind the entire app/process to Wi-Fi:
