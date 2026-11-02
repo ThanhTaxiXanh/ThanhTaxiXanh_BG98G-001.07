@@ -2,6 +2,8 @@ package vn.thanhtaxixanh.bg98g00107.camera
 
 import android.content.Context
 import android.graphics.Bitmap
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.rtsp.RtspMediaSource
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -57,9 +59,9 @@ object LiveCameraController {
     }
 
     /** Starts only after the phone user explicitly enables and saves a source. */
-    fun connect(context: Context, url: String) {
+    fun connect(context: Context, url: String, forceTcp: Boolean = true) {
         require(Looper.myLooper() == Looper.getMainLooper())
-        LiveCameraConfig.save(context, url, true)
+        LiveCameraConfig.save(context, url, true, forceTcp)
         applicationContext = context.applicationContext
         releaseSession()
         state = "Đang kết nối Camera..."
@@ -118,7 +120,18 @@ object LiveCameraController {
         notifyClients()
     }
 
+    @OptIn(UnstableApi::class)
     private fun startPlayer(context: Context, url: String, surface: Surface) {
+        // Unlike the old default socket, use the same Wi-Fi as the successful
+        // 70mai OPTIONS probe. Do not bind the entire app/process to Wi-Fi:
+        // maps and non-camera features may require Internet over mobile data.
+        val wifi = CameraWifiNetwork.find(context)
+        if (wifi == null) {
+            releaseSession()
+            state = "Không tìm thấy mạng Wi-Fi; hãy kết nối Wi-Fi 70mai."
+            notifyClients()
+            return
+        }
         try {
             val instance = ExoPlayer.Builder(context).build()
             player = instance
@@ -140,13 +153,21 @@ object LiveCameraController {
                 override fun onPlayerError(error: PlaybackException) {
                     if (player !== instance) return
                     releaseSession()
-                    // Do not expose RTSP URLs, credentials or device details in UI logs.
-                    state = "Không nhận được RTSP (" + error.errorCodeName + "). " +
-                        "Kiểm tra Wi-Fi 70mai, URL và bước bắt tay của camera."
+                    // Never expose full exception messages: RTSP links may have
+                    // embedded credentials. Display exception *types* only.
+                    val failureType = error.cause?.javaClass?.simpleName ?: "Unknown"
+                    state = "RTSP qua Wi-Fi: " + error.errorCodeName +
+                        " (" + failureType + "). " +
+                        "Thử kiểm tra DESCRIBE/SDP hoặc đổi chế độ TCP/UDP."
                     notifyClients()
                 }
             })
-            instance.setMediaItem(MediaItem.fromUri(url))
+            val rtspSource = RtspMediaSource.Factory()
+                .setSocketFactory(wifi.socketFactory)
+                .setForceUseRtpTcp(LiveCameraConfig.forceTcp(context))
+                .setTimeoutMs(12000)
+                .createMediaSource(MediaItem.fromUri(url))
+            instance.setMediaSource(rtspSource)
             instance.prepare()
             instance.playWhenReady = true
         } catch (_: Exception) {
