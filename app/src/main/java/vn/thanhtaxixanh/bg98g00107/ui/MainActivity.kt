@@ -1193,7 +1193,7 @@ class MainActivity : Activity() {
         toggle("Hiện ô mã QR", current.showQr) { value, checked ->
             value.copy(showQr = checked)
         }
-        toggle("Hiện ô Biển báo / tốc độ", current.showSigns) { value, checked ->
+        toggle("Hiện ô Camera giao thông", current.showSigns) { value, checked ->
             value.copy(showSigns = checked)
         }
         toggle("Hiện tên đường trên bản đồ", current.showStreetName) { value, checked ->
