@@ -40,7 +40,9 @@ data class UiState(
     val signs: SignsState = SignsState.EMPTY,
     val settings: DashboardSettings = DashboardSettings(),
     val guidance: RouteGuidanceState = RouteGuidanceState.EMPTY,
-    val laneGuidance: LaneGuidanceState = LaneGuidanceState.EMPTY
+    val laneGuidance: LaneGuidanceState = LaneGuidanceState.EMPTY,
+    val cameraFrame: Bitmap? = null,
+    val cameraStatus: String = "Camera chưa kết nối"
 )
 
 class LauncherRenderer {
@@ -228,8 +230,8 @@ class LauncherRenderer {
         else drawDisabledPanel(c, cal, "Lịch đã ẩn")
         if (st.settings.showQr) drawQr(c, qr, st.qrFile)
         else drawDisabledPanel(c, qr, "QR đã ẩn")
-        if (st.settings.showSigns) drawSigns(c, signs, st)
-        else drawDisabledPanel(c, signs, "Biển báo đã ẩn")
+        if (st.settings.showSigns) drawLiveCamera(c, signs, st.cameraFrame, st.cameraStatus)
+        else drawDisabledPanel(c, signs, "Camera đã ẩn")
         drawIcons(c, icons, st.selectedIcon)
     }
 
@@ -820,6 +822,43 @@ class LauncherRenderer {
             qrScaledH = dh
         }
         c.drawBitmap(qrScaled!!, panel.centerX() - dw / 2f, panel.centerY() - dh / 2f, null)
+    }
+
+    // ---------- khung hình 70mai RTSP (debug Android Auto + phone preview) ----------
+
+    private fun drawLiveCamera(c: Canvas, r: RectF, frame: Bitmap?, status: String) {
+        val k = minOf(r.width() / 318f, r.height() / 223f, 1.2f)
+        card(c, r, maxOf(10f, 24f * k))
+        val pad = maxOf(5f, 9f * k)
+        val inner = RectF(r.left + pad, r.top + pad, r.right - pad, r.bottom - pad)
+        fill.color = Color.BLACK
+        c.drawRoundRect(inner, maxOf(6f, 12f * k), maxOf(6f, 12f * k), fill)
+
+        if (frame != null && !frame.isRecycled) {
+            // Fit inside the reserved tile; do not distort the camera aspect ratio.
+            val scale = minOf(inner.width() / frame.width, inner.height() / frame.height)
+            val dw = frame.width * scale
+            val dh = frame.height * scale
+            val dest = RectF(inner.centerX() - dw / 2f, inner.centerY() - dh / 2f,
+                inner.centerX() + dw / 2f, inner.centerY() + dh / 2f)
+            c.save()
+            c.clipRect(inner)
+            c.drawBitmap(frame, null, dest, framePaint)
+            c.restore()
+            val title = "Camera trực tiếp"
+            val headH = maxOf(24f, 35f * k)
+            bubble(c, RectF(inner.left, inner.top, inner.right, inner.top + headH))
+            text(c, title, inner.left + 9f * k,
+                inner.top + headH * 0.72f, maxOf(11f, 15f * k),
+                Color.WHITE, true, Paint.Align.LEFT, inner.width() - 16f * k)
+        } else {
+            textMid(c, "Camera trực tiếp", inner.centerX(),
+                inner.centerY() - maxOf(8f, 15f * k),
+                maxOf(12f, 19f * k), Color.WHITE, true, inner.width() * 0.92f)
+            textMid(c, status, inner.centerX(),
+                inner.centerY() + maxOf(12f, 24f * k),
+                maxOf(10f, 13f * k), MUTED, false, inner.width() * 0.94f)
+        }
     }
 
     // ---------- biển báo & giới hạn tốc độ ----------
