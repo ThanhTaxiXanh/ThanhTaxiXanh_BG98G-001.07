@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import vn.thanhtaxixanh.bg98g00107.camera.LiveCameraController
 import vn.thanhtaxixanh.bg98g00107.camera.LiveCameraConfig
+import vn.thanhtaxixanh.bg98g00107.camera.RtspWifiDiagnostic
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -25,6 +26,7 @@ class AiCameraActivity : Activity() {
     private lateinit var livePreview: ImageView
     private lateinit var liveStatus: TextView
     private lateinit var streamUrl: EditText
+    private lateinit var forceTcp: CheckBox
     private val liveHandler = Handler(Looper.getMainLooper())
     private val liveConsumer = "ai-camera@" + System.identityHashCode(this)
     private val liveTicker = object : Runnable {
@@ -68,10 +70,36 @@ class AiCameraActivity : Activity() {
             setText(LiveCameraConfig.url(applicationContext))
         }
         body.addView(streamUrl)
+        forceTcp = CheckBox(this).apply {
+            text = "Truyền RTP qua TCP (khuyên thử trước, bỏ chọn để dùng UDP)"
+            isChecked = LiveCameraConfig.forceTcp(applicationContext)
+        }
+        body.addView(forceTcp)
+        body.addView(button("Chẩn đoán đường phát (DESCRIBE / SDP)") {
+            val requested = streamUrl.text.toString().trim()
+            if (!LiveCameraConfig.isValidRtsp(requested)) {
+                Toast.makeText(this, "Hãy nhập URL RTSP hợp lệ",
+                    Toast.LENGTH_SHORT).show()
+            } else {
+                info.text = "Đang kiểm tra các đường dẫn RTSP qua Wi-Fi 70mai..."
+                worker.execute {
+                    val result = RtspWifiDiagnostic.check(applicationContext, requested)
+                    runOnUiThread {
+                        info.text = result.details
+                        result.playableCandidate?.let { candidate ->
+                            // A valid SDP is only a *candidate*, not guaranteed
+                            // playable until SETUP/PLAY and decoding succeeds.
+                            streamUrl.setText(candidate)
+                            streamUrl.setSelection(streamUrl.text.length)
+                        }
+                    }
+                }
+            }
+        })
         body.addView(button("Kết nối / cập nhật Camera trực tiếp") {
             try {
                 LiveCameraController.connect(
-                    applicationContext, streamUrl.text.toString()
+                    applicationContext, streamUrl.text.toString(), forceTcp.isChecked
                 )
                 updateLivePreview()
             } catch (e: Exception) {
@@ -86,7 +114,9 @@ class AiCameraActivity : Activity() {
         body.addView(label(
             "Chỉ thử kết nối khi xe đã dừng. RTSP mặc định của profile 70mai G5XX " +
             "chưa xác minh được bước bắt tay và đường phát hình trên A500S Plus. " +
-            "Cần kết nối đúng Wi-Fi của camera; không nhập mật khẩu RTSP để chia sẻ công khai."
+            "Cần kết nối đúng Wi-Fi của camera; 200 OK ở OPTIONS chưa đủ. " +
+            "Chạy chẩn đoán DESCRIBE/SDP để tìm ứng viên phát, rồi kết nối. " +
+            "Không nhập mật khẩu RTSP để chia sẻ công khai."
         ))
         body.addView(button("Cài VTSR YOLOv8n · 56 biển Việt Nam") {
             AlertDialog.Builder(this)
