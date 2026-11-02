@@ -18,7 +18,7 @@ object LiveCameraConfig {
         uri.scheme.equals("rtsp", ignoreCase = true) &&
             !uri.host.isNullOrBlank() &&
             uri.port in -1..65535 && uri.port != 0 &&
-            raw.length <= 512 && !raw.contains('\\n') && !raw.contains('\\r')
+            raw.length <= 512 && raw.none { it.code == 10 || it.code == 13 }
     } catch (_: Exception) {
         false
     }
